@@ -81,9 +81,72 @@ $sugerencias_file     = $data_dir . '/sugerencias_pendientes.json';
 $prompt_file          = $data_dir . '/prompt.txt';
 $sources_file         = $data_dir . '/sources.json';
 $rss_file             = __DIR__ . '/rss.xml';
-$env_file             = __DIR__ . '/.env';
-// Cargar idioma objetivo antes de definir la ruta del RSS traducido
-$env_vars = file_exists($env_file) ? parse_ini_file($env_file) : [];
+$pm2_env_file         = $data_dir . '/pm2_env.json';
+
+if (!function_exists('pm2_env_defaults')) {
+    function pm2_env_defaults(string $rss_path): array {
+        return [
+            'GEMINI_API_KEY' => '',
+            'GEMINI_MODEL' => 'gemini-1.5-flash-latest',
+            'GOOGLE_TRANSLATE_API_KEY' => '',
+            'TRANSLATOR_TARGET_LANG' => 'en',
+            'TRANSLATOR_INTERVAL_MS' => '60000',
+            'TELEGRAM_AUTO_SEND_ES' => '1',
+            'PM2_BIN' => '',
+            'INPUT_RSS' => $rss_path,
+            'OUTPUT_RSS' => '',
+        ];
+    }
+}
+
+if (!function_exists('load_pm2_env')) {
+    function load_pm2_env(string $path, array $defaults): array {
+        if (!file_exists($path)) {
+            $encoded = json_encode($defaults, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($encoded !== false) {
+                @file_put_contents($path, $encoded . "\n");
+            }
+            return $defaults;
+        }
+        $raw = @file_get_contents($path);
+        $data = json_decode($raw ?: '', true);
+        if (!is_array($data)) {
+            $data = [];
+        }
+        return array_merge($defaults, $data);
+    }
+}
+
+if (!function_exists('save_pm2_env')) {
+    function save_pm2_env(string $path, array $env): bool {
+        $dir = dirname($path);
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
+        $encoded = json_encode($env, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($encoded === false) {
+            return false;
+        }
+        $encoded .= "\n";
+        $tmp = $path . '.tmp';
+        if (@file_put_contents($tmp, $encoded) === false) {
+            return false;
+        }
+        if (@rename($tmp, $path)) {
+            @chmod($path, 0664);
+            return true;
+        }
+        $ok = @file_put_contents($path, $encoded);
+        @unlink($tmp);
+        if ($ok === false) {
+            return false;
+        }
+        @chmod($path, 0664);
+        return true;
+    }
+}
+
+$env_defaults = pm2_env_defaults($rss_file);
+$env_vars = load_pm2_env($pm2_env_file, $env_defaults);
+$env_vars['INPUT_RSS'] = $rss_file;
 $target_lang = strtolower($env_vars['TRANSLATOR_TARGET_LANG'] ?? 'en');
 // Personalizaciones de feeds por idioma (debe declararse antes de usarla en $rss_en_file)
 $feed_custom_file     = $data_dir . '/feed_customizations.json';
@@ -99,6 +162,10 @@ function feed_filename_for_lang($lang, $feed_custom) {
     return 'rss_' . $lang . '.xml';
 }
 $rss_en_file          = __DIR__ . '/' . feed_filename_for_lang($target_lang, $feed_custom);
+if (empty($env_vars['OUTPUT_RSS'])) {
+    $env_vars['OUTPUT_RSS'] = $rss_en_file;
+    save_pm2_env($pm2_env_file, $env_vars);
+}
 $worker_script        = __DIR__ . '/worker.js';
 $translator_script    = __DIR__ . '/rss_translator.js';
 $node_path            = '/usr/bin/node';
@@ -110,7 +177,6 @@ $gemini_log_file      = $data_dir . '/gemini_log.jsonl'; // <-- 1. RUTA DEL NUEV
 // Caches del traductor
 $rss_change_cache     = $data_dir . '/rss_change_cache.json';
 $translation_cache    = $data_dir . '/translation_cache.json';
-$pm2_env_file         = $data_dir . '/pm2_env.json';
 // Telegram bots tokens por idioma
 $telegram_tokens_file = $data_dir . '/telegram_tokens.json';
 // Registro de items enviados a Telegram por idioma
@@ -265,9 +331,6 @@ if (!function_exists('derive_title_from_summary')) {
 // Eliminado: Integración con Telegram/Communalia
 
 $message = ''; $message_type = '';
-$env_vars = file_exists($env_file) ? parse_ini_file($env_file) : [];
-// Idioma objetivo de la traducción (por defecto: en)
-$target_lang = strtolower($env_vars['TRANSLATOR_TARGET_LANG'] ?? 'en');
 function lang_name_es($code) {
     static $map = [
         'af'=>'afrikáans','sq'=>'albanés','am'=>'amárico','ar'=>'árabe','hy'=>'armenio','as'=>'asamés','ay'=>'aimara','az'=>'azerbaiyano',
@@ -928,40 +991,34 @@ if (isset($_POST['action'])) {
         }
     }
 
-    // Guardar configuración (.env)
+    // Guardar configuración (pm2_env.json)
     if (isset($_POST['save_config'])) {
-        $new_env = $env_vars;
-        $new_env['GEMINI_API_KEY'] = $_POST['gemini_api_key'] ?? '';
-        $new_env['GEMINI_MODEL'] = $_POST['gemini_model'] ?? 'gemini-1.5-flash-latest';
-        $new_env['GOOGLE_TRANSLATE_API_KEY'] = $_POST['google_translate_api_key'] ?? '';
-        // Telegram auto-send ES
-        $auto_es = isset($_POST['telegram_auto_send_es']) ? '1' : '0';
-        $new_env['TELEGRAM_AUTO_SEND_ES'] = $auto_es;
+        $new_env = array_merge($env_defaults, $env_vars);
+        $new_env['GEMINI_API_KEY'] = trim($_POST['gemini_api_key'] ?? '');
+        $new_env['GEMINI_MODEL'] = trim($_POST['gemini_model'] ?? 'gemini-1.5-flash-latest');
+        $new_env['GOOGLE_TRANSLATE_API_KEY'] = trim($_POST['google_translate_api_key'] ?? '');
+        $new_env['TELEGRAM_AUTO_SEND_ES'] = isset($_POST['telegram_auto_send_es']) ? '1' : '0';
         if (isset($_POST['pm2_bin'])) { $new_env['PM2_BIN'] = trim($_POST['pm2_bin']); }
         if (!empty($_POST['translator_lang'])) { $new_env['TRANSLATOR_TARGET_LANG'] = strtolower(trim($_POST['translator_lang'])); }
 
-        // Escribir .env de forma simple (clave="valor")
-        $lines = [];
-        foreach ($new_env as $k => $v) {
-            $k = preg_replace('/[^A-Z0-9_]/', '', strtoupper($k));
-            $v = str_replace(["\r", "\n"], ' ', (string)$v);
-            $lines[] = $k . '="' . addslashes($v) . '"';
+        $new_target = strtolower($new_env['TRANSLATOR_TARGET_LANG'] ?? 'en');
+        $rss_en_file = __DIR__ . '/' . feed_filename_for_lang($new_target, $feed_custom);
+        $new_env['INPUT_RSS'] = $rss_file;
+        $new_env['OUTPUT_RSS'] = $rss_en_file;
+        if (!isset($new_env['TRANSLATOR_INTERVAL_MS']) || $new_env['TRANSLATOR_INTERVAL_MS'] === '') {
+            $new_env['TRANSLATOR_INTERVAL_MS'] = '60000';
         }
-        @file_put_contents($env_file, implode("\n", $lines) . "\n");
-        $env_vars = $new_env; // actualizar en memoria
-        $target_lang = strtolower($env_vars['TRANSLATOR_TARGET_LANG'] ?? 'en');
-        $translated_lang_name = lang_name_es($target_lang);
-        $rss_en_file = __DIR__ . '/' . feed_filename_for_lang($target_lang, $feed_custom);
-        // Escribir entorno privado para PM2 (data/pm2_env.json)
-        $pm2_env = [
-            'GOOGLE_TRANSLATE_API_KEY' => $env_vars['GOOGLE_TRANSLATE_API_KEY'] ?? '',
-            'TRANSLATOR_TARGET_LANG'   => $target_lang,
-            'INPUT_RSS'                => $rss_file,
-            // Permite sobreescribir por PM2 si se desea: TRANSLATOR_INTERVAL_MS, OUTPUT_RSS
-        ];
-        @file_put_contents($pm2_env_file, json_encode($pm2_env, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        $message = "Configuración guardada.";
-        $message_type = 'success';
+
+        if (!save_pm2_env($pm2_env_file, $new_env)) {
+            $message = 'No se pudo guardar la configuración.';
+            $message_type = 'error';
+        } else {
+            $env_vars = $new_env;
+            $target_lang = $new_target;
+            $translated_lang_name = lang_name_es($target_lang);
+            $message = "Configuración guardada.";
+            $message_type = 'success';
+        }
     }
 
     // Reiniciar PM2 (traductor RSS)
@@ -985,13 +1042,14 @@ if (isset($_POST['action'])) {
         $active_tab = 'config';
         // Regenerar pm2_env.json con valores actuales
         $current_target = strtolower($env_vars['TRANSLATOR_TARGET_LANG'] ?? $target_lang ?? 'en');
-        $pm2_env = [
-            'GOOGLE_TRANSLATE_API_KEY' => $env_vars['GOOGLE_TRANSLATE_API_KEY'] ?? '',
-            'TRANSLATOR_TARGET_LANG'   => $current_target,
-            'INPUT_RSS'                => $rss_file,
-        ];
-        $ok = @file_put_contents($pm2_env_file, json_encode($pm2_env, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        if ($ok === false) {
+        $pm2_env = array_merge($env_defaults, $env_vars);
+        $pm2_env['INPUT_RSS'] = $rss_file;
+        $pm2_env['OUTPUT_RSS'] = __DIR__ . '/' . feed_filename_for_lang($current_target, $feed_custom);
+        if (!isset($pm2_env['TRANSLATOR_INTERVAL_MS']) || $pm2_env['TRANSLATOR_INTERVAL_MS'] === '') {
+            $pm2_env['TRANSLATOR_INTERVAL_MS'] = '60000';
+        }
+        $ok = save_pm2_env($pm2_env_file, $pm2_env);
+        if (!$ok) {
             $message = 'No se pudo escribir data/pm2_env.json.'; $message_type = 'error';
         } else {
             $pm2_bin = $env_vars['PM2_BIN'] ?? 'pm2';
@@ -1153,22 +1211,22 @@ if (isset($_POST['action'])) {
         if ($new_lang === '') {
             $message = 'Selecciona un idioma válido.'; $message_type = 'error';
         } else {
-            $new_env = $env_vars; $new_env['TRANSLATOR_TARGET_LANG'] = $new_lang;
-            $lines = [];
-            foreach ($new_env as $k => $v) { $k = preg_replace('/[^A-Z0-9_]/','', strtoupper($k)); $v = str_replace(["\r","\n"],' ', (string)$v); $lines[] = $k.'="'.addslashes($v).'"'; }
-            @file_put_contents($env_file, implode("\n", $lines) . "\n");
-            $env_vars = $new_env;
-            $target_lang = $new_lang;
-            $translated_lang_name = lang_name_es($target_lang);
-            $rss_en_file = __DIR__ . '/' . feed_filename_for_lang($target_lang, $feed_custom);
-            // Actualizar también data/pm2_env.json para PM2
-            $pm2_env = [
-                'GOOGLE_TRANSLATE_API_KEY' => $env_vars['GOOGLE_TRANSLATE_API_KEY'] ?? '',
-                'TRANSLATOR_TARGET_LANG'   => $target_lang,
-                'INPUT_RSS'                => $rss_file,
-            ];
-            @file_put_contents($pm2_env_file, json_encode($pm2_env, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-            $message = 'Idioma de traducción actualizado a ' . htmlspecialchars($translated_lang_name) . '.'; $message_type = 'success';
+            $new_env = array_merge($env_defaults, $env_vars);
+            $new_env['TRANSLATOR_TARGET_LANG'] = $new_lang;
+            $new_env['OUTPUT_RSS'] = __DIR__ . '/' . feed_filename_for_lang($new_lang, $feed_custom);
+            $new_env['INPUT_RSS'] = $rss_file;
+            if (!isset($new_env['TRANSLATOR_INTERVAL_MS']) || $new_env['TRANSLATOR_INTERVAL_MS'] === '') {
+                $new_env['TRANSLATOR_INTERVAL_MS'] = '60000';
+            }
+            if (!save_pm2_env($pm2_env_file, $new_env)) {
+                $message = 'No se pudo actualizar la configuración.'; $message_type = 'error';
+            } else {
+                $env_vars = $new_env;
+                $target_lang = $new_lang;
+                $translated_lang_name = lang_name_es($target_lang);
+                $rss_en_file = __DIR__ . '/' . feed_filename_for_lang($target_lang, $feed_custom);
+                $message = 'Idioma de traducción actualizado a ' . htmlspecialchars($translated_lang_name) . '.'; $message_type = 'success';
+            }
         }
     }
 

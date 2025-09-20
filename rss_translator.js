@@ -1,5 +1,5 @@
 // rss_translator.js — traduce rss.xml → rss_en.xml (EN), robusto y compatible ESM
-// Requisitos: npm i axios xml2js rss dotenv he
+// Requisitos: npm i axios xml2js rss he
 // ENV recomendadas (PM2):
 //   INPUT_RSS=/var/www/html/maximalismo/centro/feed/rss.xml
 //   OUTPUT_RSS=/var/www/html/maximalismo/centro/feed/rss_en.xml
@@ -14,16 +14,10 @@ import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
 import RSS from 'rss';
 import he from 'he';
-import dotenv from 'dotenv';
 
 process.umask(0o002);
 
-
-
-// 1) Cargar variables desde .env si existe
-dotenv.config();
-
-// 2) Cargar variables sensibles desde un fichero JSON externo (por defecto: data/pm2_env.json)
+// Cargar variables de entorno desde un fichero JSON (por defecto data/pm2_env.json)
 function loadEnvFromFile() {
   try {
     const envFile = process.env.ENV_FILE || path.join(process.cwd(), 'data', 'pm2_env.json');

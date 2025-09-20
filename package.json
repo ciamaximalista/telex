@@ -10,7 +10,6 @@
   "dependencies": {
     "@google/generative-ai": "^0.16.0",
     "axios": "^1.11.0",
-    "dotenv": "^17.2.1",
     "he": "^1.2.0",
     "rss": "^1.2.2",
     "rss-parser": "^3.13.0",

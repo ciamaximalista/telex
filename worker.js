@@ -1,13 +1,30 @@
 // worker.js - Versión final con FUSIÓN de sugerencias y logging a fichero
 
-import fs from 'fs/promises';
+import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Parser from 'rss-parser';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import dotenv from 'dotenv';
-
-dotenv.config();
+// Cargar configuración de entorno desde data/pm2_env.json (o el fichero indicado por ENV_FILE)
+const ENV_FILE = process.env.ENV_FILE || null;
+function loadEnvFromFile() {
+    try {
+        const candidate = ENV_FILE || path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'pm2_env.json');
+        if (fs.existsSync(candidate)) {
+            const raw = fs.readFileSync(candidate, 'utf8');
+            const json = JSON.parse(raw);
+            for (const [k, v] of Object.entries(json)) {
+                if (process.env[k] == null) {
+                    process.env[k] = String(v);
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('⚠️ No se pudo cargar configuración:', err.message);
+    }
+}
+loadEnvFromFile();
 
 // --- 1. CONFIGURACIÓN Y RUTAS DE FICHEROS ---
 const __filename = fileURLToPath(import.meta.url);
@@ -35,7 +52,7 @@ function nowIso() {
 async function logToGemini(logData) {
   const logLine = JSON.stringify({ timestamp: nowIso(), ...logData }) + '\n';
   try {
-    await fs.appendFile(GEMINI_LOG_FILE, logLine);
+    await fsp.appendFile(GEMINI_LOG_FILE, logLine);
   } catch (e) {
     console.error('Error al escribir el log de Gemini:', e.message);
   }
@@ -43,7 +60,7 @@ async function logToGemini(logData) {
 
 const loadFile = async (filePath, defaultValue) => {
     try {
-        const content = await fs.readFile(filePath, 'utf-8');
+        const content = await fsp.readFile(filePath, 'utf-8');
         return content ? JSON.parse(content) : defaultValue;
     } catch (e) {
         return defaultValue;
@@ -82,7 +99,7 @@ function buildPrompt(item, examples, promptTemplate) {
 async function findSuggestions() {
     console.error("--- INICIANDO BÚSQUEDA (worker.js) ---");
 
-    await fs.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
+    await fsp.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
 
     // <<< CAMBIO 1: Cargar las sugerencias que ya existen ANTES de empezar >>>
     const existingSuggestions = await loadFile(PENDING_SUGGESTIONS_FILE, []);
@@ -90,7 +107,7 @@ async function findSuggestions() {
     const sentTitles = new Set(await loadFile(CACHE_TITLES_FILE, []));
     const examples = await loadFile(EXAMPLES_FILE, []);
     const sources = await loadFile(SOURCES_FILE, []);
-    const promptTemplate = await fs.readFile(PROMPT_FILE, 'utf-8').catch(() => '');
+    const promptTemplate = await fsp.readFile(PROMPT_FILE, 'utf-8').catch(() => '');
     
     if (!model || !promptTemplate) {
         console.error("ADVERTENCIA: Gemini no está configurado (API Key o prompt.txt faltan). No se generarán sugerencias.");
@@ -152,8 +169,8 @@ async function findSuggestions() {
     const mergedSuggestions = existingSuggestions.concat(newSuggestions);
     const finalSuggestions = dedupeSuggestions(mergedSuggestions);
 
-    await fs.writeFile(PENDING_SUGGESTIONS_FILE, JSON.stringify(finalSuggestions, null, 2));
-    await fs.writeFile(CACHE_TITLES_FILE, JSON.stringify([...sentTitles]));
+    await fsp.writeFile(PENDING_SUGGESTIONS_FILE, JSON.stringify(finalSuggestions, null, 2));
+    await fsp.writeFile(CACHE_TITLES_FILE, JSON.stringify([...sentTitles]));
     
     console.error("--- BÚSQUEDA FINALIZADA ---");
 }

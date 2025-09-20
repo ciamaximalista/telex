@@ -1,5 +1,6 @@
 /data
 /logs
 /node_modules
+.env
 rss.xml
 rss_en.xml

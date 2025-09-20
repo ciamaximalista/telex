@@ -63,7 +63,7 @@ npm install
 - Verifica que PHP tiene permisos de escritura sobre:
   - Directorio `data/` (y `img/` si subes imágenes).
   - Ficheros `rss.xml` y `rss_<idioma>.xml` (p. ej., `rss_en.xml`).
-  - Archivo `.env` (lo crea/modifica la pestaña Configuración).
+  - Archivo `data/pm2_env.json` (la pestaña Configuración lo crea/modifica).
 - La app utiliza `umask(0002)` para facilitar la colaboración por grupo.
 
 4) Permisos y propiedad (Debian/Ubuntu)
@@ -87,9 +87,9 @@ sudo chown www-data:www-data rss.xml rss_en.xml  # ajusta según el idioma objet
 - Abre `telex.php`. Si no hay credenciales, se mostrará `register.php` para crear el usuario inicial.
 - Podrás cambiar la contraseña desde la pestaña Configuración más adelante.
 
-6) Variables de entorno (.env)
+6) Configuración (`data/pm2_env.json`)
 
-Entra en “Configuración” y completa:
+Entra en “Configuración” y completa (se guardará en `data/pm2_env.json`):
 
 - `GEMINI_API_KEY`: clave de Google AI Studio (Gemini).
 - `GEMINI_MODEL`: por ejemplo `gemini-1.5-flash-latest` o `gemini-1.5-pro-latest`.
@@ -166,12 +166,11 @@ Solución de problemas
 - Node no se encuentra: ajusta `$node_path` en `telex.php` (por defecto `/usr/bin/node`).
 - `rss_<idioma>.xml` no cambia: revisa “Probar Translate”, usa “Forzar traducción ahora” y verifica permisos.
 - Gemini falla: usa “Probar Gemini” y verifica clave/modelo.
-- Permisos: el usuario del servidor web debe poder escribir `data/`, `img/`, `.env`, `rss.xml` y `rss_<idioma>.xml`.
+- Permisos: el usuario del servidor web debe poder escribir `data/`, `img/`, `data/pm2_env.json`, `rss.xml` y `rss_<idioma>.xml`.
 
 Seguridad de secretos
 
 - `data/` incluye un `.htaccess` con `Require all denied` para impedir el acceso directo a ficheros sensibles (como `pm2_env.json`).
-- El `.env` de la raíz está denegado por `.htaccess`. Aun así, evita publicar el repositorio con `.env` real.
 
 Actualizaciones
 
@@ -184,7 +183,7 @@ pm2 restart rss-translator
 Seguridad
 
 - Login básico (usuario/contraseña); considera restringir por IP o VPN.
-- No subas `.env` con claves reales a repositorios públicos.
+- No publiques `data/pm2_env.json` con claves reales en repositorios públicos.
 
 Licencia
 
