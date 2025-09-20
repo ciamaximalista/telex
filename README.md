@@ -1,9 +1,7 @@
-Telex — Curador de noticias con traducción de RSS y Telegram
-
-Resumen
+# Telex
 
 - Telex es una app web ligera (PHP + Node.js) para:
-  - Leer fuentes RSS y generar sugerencias con Gemini (pestaña “Telex”).
+  - Leer un grupo masivo de fuentes RSS y generar sugerencias de selección con Gemini (pestaña “Telex”).
   - Aprobar/editar y publicar un feed `rss.xml` en español.
   - Traducir automáticamente ese feed a `rss_<idioma>.xml` (por defecto `rss_en.xml`).
   - Editar ambos feeds desde la interfaz y gestionar fuentes, prompt, claves y procesos.
@@ -187,4 +185,4 @@ Seguridad
 
 Licencia
 
-- Pendiente. Añade tu licencia preferida en este archivo si aplica.
+- [EUPL v1.2](https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
