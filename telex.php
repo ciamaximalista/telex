@@ -250,12 +250,206 @@ if (!function_exists('escape_md')) {
     }
 }
 
+if (!function_exists('normalize_plain_text')) {
+    function normalize_plain_text($text) {
+        $decoded = html_entity_decode((string)$text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $decoded = preg_replace('/[\s\x{00A0}]+/u', ' ', $decoded);
+        return trim(mb_strtolower($decoded, 'UTF-8'));
+    }
+}
+
+if (!function_exists('sanitize_feed_html')) {
+    function sanitize_feed_html($title, $html) {
+        $out = trim((string)$html);
+        if ($out === '') {
+            return '';
+        }
+
+        $normTitle = normalize_plain_text($title);
+
+        $fallback = function ($html) {
+            return trim(preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', (string)$html));
+        };
+
+        libxml_use_internal_errors(true);
+        $doc = new DOMDocument('1.0', 'UTF-8');
+        $wrapper = '<div>' . $out . '</div>';
+        if (@$doc->loadHTML('<?xml encoding="utf-8" ?>' . $wrapper, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD) === false) {
+            libxml_clear_errors();
+            return $fallback($out);
+        }
+        libxml_clear_errors();
+
+        $containers = $doc->getElementsByTagName('div');
+        if ($containers->length === 0) {
+            return $fallback($out);
+        }
+        $container = $containers->item(0);
+
+        $shouldDropTitle = function (DOMNode $node) use ($normTitle) {
+            if ($normTitle === '') {
+                return false;
+            }
+            $text = normalize_plain_text($node->textContent);
+            if ($text === '') {
+                return true;
+            }
+            $trimmed = rtrim($text, " .,:;–—-!?…");
+            return ($text === $normTitle) || ($trimmed === $normTitle);
+        };
+
+        $removeNode = function (DOMNode $node) {
+            if ($node->parentNode) {
+                $node->parentNode->removeChild($node);
+            }
+        };
+
+        $cleanElementHead = function (DOMNode $element) use (&$cleanElementHead, $shouldDropTitle, $removeNode, $normTitle) {
+            $changed = false;
+            while ($element->firstChild) {
+                $child = $element->firstChild;
+                if ($child->nodeType === XML_TEXT_NODE) {
+                    $textRaw = (string)$child->textContent;
+                    $textNorm = normalize_plain_text($textRaw);
+                    if ($textNorm === '' || ($normTitle !== '' && ($textNorm === $normTitle || rtrim($textNorm, " .,:;–—-!?…") === $normTitle))) {
+                        $removeNode($child);
+                        $changed = true;
+                        continue;
+                    }
+                    // Eliminar puntuación sobrante tras quitar título
+                    if ($normTitle !== '' && str_starts_with($textNorm, $normTitle)) {
+                        $updated = ltrim(preg_replace('~^\s*' . preg_quote($normTitle, '~') . '\s*[\.:,;–—\-!?…]*\s*~iu', '', $textRaw));
+                        if ($updated === '') {
+                            $removeNode($child);
+                            $changed = true;
+                            continue;
+                        }
+                        if ($updated !== $textRaw) {
+                            $child->nodeValue = $updated;
+                            $changed = true;
+                        }
+                    }
+                    break;
+                }
+                if ($child->nodeType === XML_ELEMENT_NODE) {
+                    $name = strtolower($child->nodeName);
+                    if (in_array($name, ['br', 'hr'], true)) {
+                        $removeNode($child);
+                        $changed = true;
+                        continue;
+                    }
+                    if ($shouldDropTitle($child)) {
+                        $removeNode($child);
+                        $changed = true;
+                        continue;
+                    }
+                    if ($name === 'p') {
+                        $cleanElementHead($child);
+                        if (normalize_plain_text($child->textContent) === '') {
+                            $removeNode($child);
+                            $changed = true;
+                            continue;
+                        }
+                    }
+                }
+                break;
+            }
+            return $changed;
+        };
+
+        $iterations = 0;
+        while ($container->firstChild && $iterations < 20) {
+            $iterations++;
+            $child = $container->firstChild;
+            if ($child->nodeType === XML_TEXT_NODE) {
+                $textRaw = (string)$child->textContent;
+                $textNorm = normalize_plain_text($textRaw);
+                if ($textNorm === '' || ($normTitle !== '' && ($textNorm === $normTitle || rtrim($textNorm, " .,:;–—-!?…") === $normTitle))) {
+                    $removeNode($child);
+                    continue;
+                }
+                if ($normTitle !== '' && str_starts_with($textNorm, $normTitle)) {
+                    $updated = ltrim(preg_replace('~^\s*' . preg_quote($normTitle, '~') . '\s*[\.:,;–—\-!?…]*\s*~iu', '', $textRaw));
+                    if ($updated === '') {
+                        $removeNode($child);
+                        continue;
+                    }
+                    if ($updated !== $textRaw) {
+                        $child->nodeValue = $updated;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if ($child->nodeType === XML_ELEMENT_NODE) {
+                $name = strtolower($child->nodeName);
+                if (in_array($name, ['br', 'hr'], true)) {
+                    $removeNode($child);
+                    continue;
+                }
+                if ($shouldDropTitle($child)) {
+                    $removeNode($child);
+                    continue;
+                }
+                if ($cleanElementHead($child)) {
+                    if (normalize_plain_text($child->textContent) === '') {
+                        $removeNode($child);
+                        continue;
+                    }
+                    continue;
+                }
+            }
+            break;
+        }
+
+        // Eliminar <br> o texto vacío restante al inicio
+        while ($container->firstChild) {
+            $child = $container->firstChild;
+            if ($child->nodeType === XML_TEXT_NODE && trim($child->textContent) === '') {
+                $removeNode($child);
+                continue;
+            }
+            if ($child->nodeType === XML_ELEMENT_NODE && strtolower($child->nodeName) === 'br') {
+                $removeNode($child);
+                continue;
+            }
+            break;
+        }
+
+        $result = '';
+        foreach ($container->childNodes as $node) {
+            $result .= $doc->saveHTML($node);
+        }
+
+        return $fallback($result);
+    }
+}
+
 if (!function_exists('tg_send')) {
     function tg_send($token, $chat_id, $title, $desc, $url, $photo_url = '') {
-        $t = trim((string)$title); $d = trim((string)$desc); $u = trim((string)$url);
+        $t = trim((string)$title);
+        $d = trim((string)$desc);
+        $u = trim((string)$url);
+
+        if ($t !== '' && $d !== '') {
+            $pattern = '~^\s*' . preg_quote($t, '~') . '\b[\s:–—-]*~ui';
+            $d = preg_replace($pattern, '', $d, 1, $removed);
+            if ($removed > 0) {
+                $d = ltrim($d);
+            }
+        }
+
+        if ($u !== '' && $d !== '' && mb_stripos($d, $u) !== false) {
+            $u = '';
+        }
+
         $title_md = $t !== '' ? ('*' . escape_md($t) . '*') : '';
         $desc_md  = $d !== '' ? escape_md($d) : '';
-        $url_md   = $u !== '' ? ('`' . $u . '`') : '';
+
+        $url_md = '';
+        if ($u !== '' && !preg_match('~https?://~i', $d)) {
+            $url_md = escape_md($u);
+        }
 
         $compose = function($max_len = null) use ($title_md, $desc_md, $url_md) {
             $parts = [];
@@ -303,8 +497,9 @@ if (!function_exists('rss_item_parts')) {
         $link  = (string)($item->link ?? '');
         $guid  = (string)($item->guid ?? '');
         $desc_raw = (string)($item->description ?? '');
-        // description puede venir con CDATA/HTML: convertir a texto simple
-        $desc_text = trim(html_entity_decode(strip_tags($desc_raw), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+        // Limpiar descripción eliminando cabecera duplicada y saltos innecesarios
+        $desc_clean_html = sanitize_feed_html($title, $desc_raw);
+        $desc_text = trim(html_entity_decode(strip_tags($desc_clean_html !== '' ? $desc_clean_html : $desc_raw), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
         // Imagen: enclosure o primera <img src>
         $img = '';
         if (isset($item->enclosure)) {
@@ -410,6 +605,12 @@ if (isset($_POST['action'])) {
         }
         // Añadir entrada al RSS (sin Telegram)
         if (!empty($finalMessage)) {
+            $cleanFinal = sanitize_feed_html($suggestion['title'] ?? '', $finalMessage);
+            if ($cleanFinal !== '') {
+                $finalMessage = $cleanFinal;
+            } else {
+                $finalMessage = trim((string)$finalMessage);
+            }
             // Cargar o crear rss.xml
             libxml_use_internal_errors(true);
             if (file_exists($rss_file)) {
@@ -857,6 +1058,12 @@ if (isset($_POST['action'])) {
         }
 
         if ($title !== '') {
+            $cleanDesc = sanitize_feed_html($title, $desc);
+            if ($cleanDesc !== '') {
+                $desc = $cleanDesc;
+            } else {
+                $desc = trim((string)$desc);
+            }
             $guid = $link !== '' ? $link : ('telex:' . md5($title . '|' . $desc . '|' . microtime(true)));
             if (!isset($existingKeys[$guid])) {
                 $htmlDesc = $desc;
