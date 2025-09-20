@@ -1479,7 +1479,7 @@ if (isset($_POST['action'])) {
             $message_type='error'; goto after_post_redirect;
         }
         // No permitir renombrar rss.xml (base)
-        if (strtolower($current_file) === 'rss.xml') {
+        if (strtolower($current_file) === 'rss.xml' && strtolower($new_name) !== 'rss.xml') {
             $message = 'No se permite renombrar el fichero base rss.xml.'; $message_type='error'; goto after_post_redirect;
         }
         $old_path = __DIR__ . '/' . $current_file;
