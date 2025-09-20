@@ -1,0 +1,19 @@
+{
+  "name": "telex-suite",
+  "version": "1.0.0",
+  "description": "Herramientas para gestionar RSS y sugerencias de Gemini (sin Telegram)",
+  "main": "rss_translator.js",
+  "type": "module",
+  "scripts": {
+    "start": "pm2 start ecosystem.config.cjs"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.16.0",
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.1",
+    "he": "^1.2.0",
+    "rss": "^1.2.2",
+    "rss-parser": "^3.13.0",
+    "xml2js": "^0.6.2"
+  }
+}

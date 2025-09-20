@@ -1,0 +1,15 @@
+# No listar directorios
+Options -Indexes
+
+# Bloquear ficheros sensibles
+<FilesMatch "^(\.env|\.env\..*|composer\.(json|lock)|package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml|\.gitignore|\.gitattributes|\.gitmodules|\.editorconfig)$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "^(ecosystem\.config\.(js|cjs|json)|pm2\.config\.(js|json)|.*\.(ini|log|conf|sh|bak|old|orig|save))$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "^(config\.(js|cjs|json)|pm2\.config\.(js|json)|.*\.(ini|log|conf|sh|bak|old|orig|save))$">
+  Require all denied
+</FilesMatch>
