@@ -77,77 +77,16 @@ set_time_limit(300);
 $img_dir = __DIR__ . '/img';
 if (!is_dir($img_dir)) { @mkdir($img_dir, 0775, true); }
 
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/services.php';
+
 $sugerencias_file     = $data_dir . '/sugerencias_pendientes.json';
 $prompt_file          = $data_dir . '/prompt.txt';
 $sources_file         = $data_dir . '/sources.json';
-$rss_file             = __DIR__ . '/rss.xml';
-$pm2_env_file         = $data_dir . '/pm2_env.json';
 
-if (!function_exists('pm2_env_defaults')) {
-    function pm2_env_defaults(string $rss_path): array {
-        return [
-            'GEMINI_API_KEY' => '',
-            'GEMINI_MODEL' => 'gemini-1.5-flash-latest',
-            'GOOGLE_TRANSLATE_API_KEY' => '',
-            'TRANSLATOR_TARGET_LANG' => 'en',
-            'TRANSLATOR_INTERVAL_MS' => '60000',
-            'TELEGRAM_AUTO_SEND_ES' => '1',
-            'PM2_BIN' => '',
-            'INPUT_RSS' => $rss_path,
-            'OUTPUT_RSS' => '',
-        ];
-    }
-}
-
-if (!function_exists('load_pm2_env')) {
-    function load_pm2_env(string $path, array $defaults): array {
-        if (!file_exists($path)) {
-            $encoded = json_encode($defaults, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if ($encoded !== false) {
-                @file_put_contents($path, $encoded . "\n");
-            }
-            return $defaults;
-        }
-        $raw = @file_get_contents($path);
-        $data = json_decode($raw ?: '', true);
-        if (!is_array($data)) {
-            $data = [];
-        }
-        return array_merge($defaults, $data);
-    }
-}
-
-if (!function_exists('save_pm2_env')) {
-    function save_pm2_env(string $path, array $env): bool {
-        $dir = dirname($path);
-        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
-        $encoded = json_encode($env, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($encoded === false) {
-            return false;
-        }
-        $encoded .= "\n";
-        $tmp = $path . '.tmp';
-        if (@file_put_contents($tmp, $encoded) === false) {
-            return false;
-        }
-        if (@rename($tmp, $path)) {
-            @chmod($path, 0664);
-            return true;
-        }
-        $ok = @file_put_contents($path, $encoded);
-        @unlink($tmp);
-        if ($ok === false) {
-            return false;
-        }
-        @chmod($path, 0664);
-        return true;
-    }
-}
-
-$env_defaults = pm2_env_defaults($rss_file);
-$env_vars = load_pm2_env($pm2_env_file, $env_defaults);
-$env_vars['INPUT_RSS'] = $rss_file;
-$target_lang = strtolower($env_vars['TRANSLATOR_TARGET_LANG'] ?? 'en');
+$config = telex_load_config();
+$target_lang = strtolower($config['translator']['target_language'] ?? 'en');
+$rss_file = telex_feed_input_path($config);
 // Personalizaciones de feeds por idioma (debe declararse antes de usarla en $rss_en_file)
 $feed_custom_file     = $data_dir . '/feed_customizations.json';
 $feed_custom          = file_exists($feed_custom_file) ? (json_decode(@file_get_contents($feed_custom_file), true) ?: []) : [];
@@ -161,14 +100,8 @@ function feed_filename_for_lang($lang, $feed_custom) {
     }
     return 'rss_' . $lang . '.xml';
 }
-$rss_en_file          = __DIR__ . '/' . feed_filename_for_lang($target_lang, $feed_custom);
-if (empty($env_vars['OUTPUT_RSS'])) {
-    $env_vars['OUTPUT_RSS'] = $rss_en_file;
-    save_pm2_env($pm2_env_file, $env_vars);
-}
-$worker_script        = __DIR__ . '/worker.js';
-$translator_script    = __DIR__ . '/rss_translator.js';
-$node_path            = '/usr/bin/node';
+$target_feed_filename = telex_feed_output_filename($config, $target_lang);
+$rss_en_file          = __DIR__ . '/' . $target_feed_filename;
 $examples_file        = $data_dir . '/examples.json';
 $published_file       = $data_dir . '/published_messages.json';
 $cache_titles_file    = $data_dir . '/.sent_titles_cache.json';
@@ -211,6 +144,41 @@ function safe_dom_save(\DOMDocument $dom, string $path) {
     return false;
 }
 
+function dom_find_child(DOMElement $parent, string $localName, ?string $namespace = null): ?DOMElement {
+    foreach ($parent->childNodes as $child) {
+        if ($child instanceof DOMElement) {
+            if ($child->localName === $localName && ($namespace === null || $child->namespaceURI === $namespace)) {
+                return $child;
+            }
+        }
+    }
+    return null;
+}
+
+function dom_ensure_child(DOMDocument $doc, DOMElement $parent, string $localName, ?string $namespace = null, ?string $qualifiedName = null): DOMElement {
+    $existing = dom_find_child($parent, $localName, $namespace);
+    if ($existing instanceof DOMElement) {
+        return $existing;
+    }
+    if ($namespace !== null) {
+        $node = $doc->createElementNS($namespace, $qualifiedName ?? $localName);
+    } else {
+        $node = $doc->createElement($localName);
+    }
+    return $parent->appendChild($node);
+}
+
+function dom_set_content(DOMDocument $doc, DOMElement $element, string $content, bool $asCdata = false): void {
+    while ($element->firstChild) {
+        $element->removeChild($element->firstChild);
+    }
+    if ($asCdata) {
+        $element->appendChild($doc->createCDATASection($content));
+    } else {
+        $element->appendChild($doc->createTextNode($content));
+    }
+}
+
 // Crear archivos de datos si no existen
 function ensure_file($path, $content) {
     if (!file_exists($path)) { @file_put_contents($path, $content); }
@@ -224,7 +192,7 @@ ensure_file($cache_titles_file, "[]\n");
 ensure_file($titlekeys_file, "[]\n");
 ensure_file($sources_file, "[]\n");
 ensure_file($gemini_log_file, "");
-ensure_file($rss_change_cache, json_encode(["hash" => ""], JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE) . "\n");
+ensure_file($rss_change_cache, "{}\n");
 ensure_file($translation_cache, "{}\n");
 if (!file_exists($prompt_file)) {
     $default_prompt = "CRITERIOS...\n- Usa {{title}}, {{description}}, {{link}} y {{examples}}.\nSalida: una línea, ≤40 palabras, o IGNORAR.";
@@ -250,39 +218,6 @@ if (!function_exists('escape_md')) {
     }
 }
 
-if (!function_exists('normalize_url_compare')) {
-    function normalize_url_compare($url) {
-        $url = trim((string)$url);
-        if ($url === '') return '';
-        $parts = @parse_url($url);
-        if (!$parts || empty($parts['host'])) {
-            return rtrim($url, "/");
-        }
-        $scheme = strtolower($parts['scheme'] ?? 'http');
-        $host = strtolower($parts['host']);
-        $path = $parts['path'] ?? '';
-        $path = preg_replace('#/{2,}#', '/', $path);
-        $path = rtrim($path, '/');
-        $query = isset($parts['query']) ? ('?' . $parts['query']) : '';
-        $fragment = isset($parts['fragment']) ? ('#' . $parts['fragment']) : '';
-        return $scheme . '://' . $host . $path . $query . $fragment;
-    }
-}
-
-if (!function_exists('extract_url_from_text')) {
-    function extract_url_from_text($text) {
-        if (!is_string($text) || $text === '') {
-            return '';
-        }
-        $decoded = html_entity_decode($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        if (preg_match_all('~https?://[^\s<>"\']+~u', $decoded, $matches) && !empty($matches[0])) {
-            $url = end($matches[0]);
-            return rtrim(trim($url), " .,;:–—-…\"'\])}>");
-        }
-        return '';
-    }
-}
-
 if (!function_exists('normalize_plain_text')) {
     function normalize_plain_text($text) {
         $decoded = html_entity_decode((string)$text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -292,7 +227,7 @@ if (!function_exists('normalize_plain_text')) {
 }
 
 if (!function_exists('sanitize_feed_html')) {
-    function sanitize_feed_html($title, $html, $link = '') {
+    function sanitize_feed_html($title, $html) {
         $out = trim((string)$html);
         if ($out === '') {
             return '';
@@ -301,11 +236,8 @@ if (!function_exists('sanitize_feed_html')) {
         $normTitle = normalize_plain_text($title);
 
         $fallback = function ($html) {
-            $html = preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', (string)$html);
-            return rtrim(trim($html), ' .,:;–—-');
+            return trim(preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', (string)$html));
         };
-
-        $targetLink = normalize_url_compare($link);
 
         libxml_use_internal_errors(true);
         $doc = new DOMDocument('1.0', 'UTF-8');
@@ -438,17 +370,6 @@ if (!function_exists('sanitize_feed_html')) {
             break;
         }
 
-        if ($targetLink !== '') {
-            $xpath = new DOMXPath($doc);
-            foreach ($xpath->query('.//a[@href]', $container) as $anchor) {
-                /** @var DOMElement $anchor */
-                $href = normalize_url_compare($anchor->getAttribute('href'));
-                if ($href === $targetLink) {
-                    $removeNode($anchor);
-                }
-            }
-        }
-
         // Eliminar <br> o texto vacío restante al inicio
         while ($container->firstChild) {
             $child = $container->firstChild;
@@ -468,26 +389,186 @@ if (!function_exists('sanitize_feed_html')) {
             $result .= $doc->saveHTML($node);
         }
 
-        $cleaned = $fallback($result);
+        return $fallback($result);
+    }
+}
 
-        if ($targetLink !== '') {
-            $cleaned = preg_replace_callback('~<a[^>]+href="([^"]+)"[^>]*>.*?</a>~i', function ($matches) use ($targetLink) {
-                return normalize_url_compare($matches[1]) === $targetLink ? '' : $matches[0];
-            }, $cleaned);
+if (!function_exists('telex_strip_leading_title')) {
+    function telex_strip_leading_title(string $text, string $title): string
+    {
+        $text = trim($text);
+        $titleNorm = normalize_plain_text($title);
+        if ($text === '' || $titleNorm === '') {
+            return $text;
+        }
 
-            $linkVariants = array_unique(array_filter([
-                $targetLink,
-                htmlspecialchars($targetLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-                htmlentities($targetLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
-            ]));
-            foreach ($linkVariants as $variant) {
-                if ($variant === '') continue;
-                $pattern = '~\s*' . preg_quote($variant, '~') . '\s*~u';
-                $cleaned = preg_replace($pattern, ' ', $cleaned);
+        $textNorm = normalize_plain_text($text);
+        if ($textNorm === '') {
+            return $text;
+        }
+
+        if (str_starts_with($textNorm, $titleNorm)) {
+            $pattern = '~^\s*' . preg_quote($title, '~') . '\s*[\.:,;–—\-!?…«»"\']*\s*~u';
+            $updated = preg_replace($pattern, '', $text, 1, $count);
+            if ($count > 0) {
+                return trim($updated);
+            }
+
+            if (preg_match('~^([^.!?]{0,320}[.!?])\s*(.*)$~us', $text, $m)) {
+                $leadNorm = normalize_plain_text($m[1]);
+                if ($leadNorm !== '' && str_starts_with($leadNorm, $titleNorm)) {
+                    return trim($m[2]);
+                }
+            }
+
+            $wordsTitle = preg_split('~\s+~u', $titleNorm, -1, PREG_SPLIT_NO_EMPTY);
+            $wordsText = preg_split('~\s+~u', $textNorm, -1, PREG_SPLIT_NO_EMPTY);
+            if (!empty($wordsTitle) && !empty($wordsText)) {
+                $match = true;
+                foreach ($wordsTitle as $idx => $word) {
+                    if (!isset($wordsText[$idx]) || $wordsText[$idx] !== $word) {
+                        $match = false;
+                        break;
+                    }
+                }
+                if ($match) {
+                    $textWordsOriginal = preg_split('~\s+~u', $text, -1, PREG_SPLIT_NO_EMPTY);
+                    $remaining = array_slice($textWordsOriginal, count($wordsTitle));
+                    return trim(implode(' ', $remaining));
+                }
             }
         }
 
-        return trim(preg_replace('~\s{2,}~u', ' ', $cleaned));
+        return $text;
+    }
+}
+
+if (!function_exists('telex_description_plain')) {
+    function telex_description_plain(string $value, string $title = ''): string
+    {
+        $content = trim($value);
+        if ($content === '') {
+            return '';
+        }
+
+        $clean = sanitize_feed_html($title, $content);
+        if ($clean !== '') {
+            $content = $clean;
+        }
+
+        $content = preg_replace('~</p>\s*<p[^>]*>~i', "\n", $content);
+        $content = preg_replace('~<br\s*/?>~i', "\n", $content);
+        $content = strip_tags($content);
+        $content = html_entity_decode($content, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $content = preg_replace("/[\r\n]+/u", "\n", $content);
+        $content = preg_replace("/\s+/u", ' ', $content);
+        $content = telex_strip_leading_title($content, $title);
+        return trim($content);
+    }
+}
+
+if (!function_exists('telex_build_html_from_text')) {
+    function telex_build_html_from_text(string $text, ?string $imageUrl = null): string
+    {
+        $text = trim($text);
+        $html = '';
+        if ($imageUrl !== null && $imageUrl !== '') {
+            $safeImg = htmlspecialchars($imageUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $html .= '<p><img src="' . $safeImg . '" alt="" style="max-width:100%; height:auto;" /></p>';
+        }
+
+        if ($text !== '') {
+            $paragraphs = preg_split('~\n+~u', $text);
+            $paragraphs = array_filter(array_map('trim', $paragraphs), static function ($p) {
+                return $p !== '';
+            });
+            if (!empty($paragraphs)) {
+                foreach ($paragraphs as $p) {
+                    $html .= '<p>' . htmlspecialchars($p, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+                }
+            } else {
+                $html .= htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            }
+        }
+
+        return $html;
+    }
+}
+
+if (!function_exists('telex_save_rss_document')) {
+    function telex_save_rss_document(SimpleXMLElement $rss, string $path): bool
+    {
+        $xmlRaw = $rss->asXML();
+        if ($xmlRaw === false) {
+            return false;
+        }
+
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom->preserveWhiteSpace = false;
+        $dom->formatOutput = true;
+        if (@$dom->loadXML($xmlRaw) === false) {
+            return false;
+        }
+
+        $xpath = new DOMXPath($dom);
+        $items = $xpath->query('/rss/channel/item');
+        if (!$items) {
+            return safe_dom_save($dom, $path);
+        }
+
+        $records = [];
+        $idx = 0;
+        foreach ($items as $itemNode) {
+            /** @var DOMElement $itemNode */
+            $linkNode = $itemNode->getElementsByTagName('link')->item(0);
+            $guidNode = $itemNode->getElementsByTagName('guid')->item(0);
+            $pubNode  = $itemNode->getElementsByTagName('pubDate')->item(0);
+
+            $linkVal = $linkNode ? trim($linkNode->textContent) : '';
+            $guidVal = $guidNode ? trim($guidNode->textContent) : '';
+            $key = $linkVal !== '' ? $linkVal : $guidVal;
+            if ($key === '') {
+                $key = 'auto:' . md5($dom->saveXML($itemNode));
+            }
+
+            $timestamp = 0;
+            if ($pubNode) {
+                $ts = strtotime($pubNode->textContent);
+                if ($ts !== false) {
+                    $timestamp = $ts;
+                }
+            }
+
+            $records[] = [
+                'node' => $itemNode->cloneNode(true),
+                'key'  => $key,
+                'ts'   => $timestamp,
+                'idx'  => $idx++,
+            ];
+        }
+
+        foreach ($items as $itemNode) {
+            $itemNode->parentNode->removeChild($itemNode);
+        }
+
+        usort($records, static function ($a, $b) {
+            if ($a['ts'] === $b['ts']) {
+                return $b['idx'] <=> $a['idx'];
+            }
+            return $b['ts'] <=> $a['ts'];
+        });
+
+        $seen = [];
+        $channel = $xpath->query('/rss/channel')->item(0);
+        foreach ($records as $rec) {
+            if (isset($seen[$rec['key']])) {
+                continue;
+            }
+            $seen[$rec['key']] = true;
+            $channel->appendChild($rec['node']);
+        }
+
+        return safe_dom_save($dom, $path);
     }
 }
 
@@ -508,10 +589,6 @@ if (!function_exists('tg_send')) {
         if ($u !== '' && $d !== '' && mb_stripos($d, $u) !== false) {
             $u = '';
         }
-
-        $d = ltrim($d, "\r\n");
-        $d = preg_replace('~^[\s\.\,:;–—-]+~u', '', $d);
-        $d = ltrim($d);
 
         $title_md = $t !== '' ? ('*' . escape_md($t) . '*') : '';
         $desc_md  = $d !== '' ? escape_md($d) : '';
@@ -619,41 +696,195 @@ function lang_name_es($code) {
     return $map[$k] ?? strtoupper($code);
 }
 $translated_lang_name = lang_name_es($target_lang);
-$pm2_detected = trim((string)@shell_exec('command -v pm2 2>/dev/null'));
-if ($pm2_detected === '') { $pm2_detected = trim((string)@shell_exec('which pm2 2>/dev/null')); }
 $active_tab = $_GET['tab'] ?? 'gemini';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $active_tab = $_POST['active_tab'] ?? 'gemini';
     
-    // 2.1 Recibir Telex (worker Node)
+    // 2.1 Recibir Telex (nuevo generador de sugerencias)
     if (isset($_POST['fetch_suggestions'])) {
-        // <<<< --- TAREA 1: BORRAR EL LOG ANTERIOR --- >>>>
         @file_put_contents($gemini_log_file, '');
 
-        $gemini_key = $env_vars['GEMINI_API_KEY'] ?? '';
-        $gemini_model = $env_vars['GEMINI_MODEL'] ?? 'gemini-1.5-flash-latest';
-        $command = "GEMINI_API_KEY='{$gemini_key}' GEMINI_MODEL='{$gemini_model}' {$node_path} {$worker_script} 2>&1";
-        shell_exec($command);
-        $message = "Búsqueda completada."; $message_type = 'success';
-    }
-    
-    // Ejecutar traducción ahora (una vez)
-    if (isset($_POST['run_translator_now'])) {
-        $active_tab = 'traduccion';
-        $gt_key = $env_vars['GOOGLE_TRANSLATE_API_KEY'] ?? '';
-        $cmd = "GOOGLE_TRANSLATE_API_KEY='{$gt_key}' TRANSLATOR_TARGET_LANG='{$target_lang}' FORCE='1' INPUT_RSS='{$rss_file}' OUTPUT_RSS='{$rss_en_file}' RUN_ONCE='1' {$node_path} {$translator_script} 2>&1";
-        $out = @shell_exec($cmd);
-        if ($out === null) {
-            $message = "No se pudo ejecutar el traductor. Verifica Node/permiso de ejecución.";
-            $message_type = 'error';
+        $result = telex_generate_suggestions(
+            $config,
+            $prompt_file,
+            $sources_file,
+            $sugerencias_file,
+            $examples_file,
+            $gemini_log_file,
+            $published_file,
+            $titlekeys_file
+        );
+
+        if (!empty($result['ok'])) {
+            telex_config_set($config, ['suggestions', 'last_run'], date('c'));
+            telex_save_config($config);
+            $message = $result['message'] ?? 'Búsqueda completada.';
+            $message_type = $result['created'] ?? 0 ? 'success' : 'info';
         } else {
-            $snippet = trim(substr($out, -200));
-            $message = "Traducción ejecutada. Revisa rss_" . htmlspecialchars($target_lang) . ".xml" . ($snippet ? " — Log: " . htmlspecialchars($snippet) : "");
-            $message_type = 'success';
+            $message = $result['message'] ?? 'No se pudieron generar sugerencias.';
+            $message_type = 'error';
         }
     }
     
+    // Ejecutar traducción ahora (nuevo traductor PHP)
+    if (isset($_POST['run_translator_now'])) {
+        $active_tab = 'traduccion';
+        $force = isset($_POST['force_translate']);
+        $result = telex_translate_feed(
+            $config,
+            $rss_file,
+            $rss_en_file,
+            $target_lang,
+            $translation_cache,
+            $rss_change_cache,
+            $force
+        );
+        if (!empty($result['ok'])) {
+            $message = $result['message'] ?? 'Traducción completada.';
+            $message_type = !empty($result['skipped']) ? 'info' : 'success';
+        } else {
+            $message = $result['message'] ?? 'No se pudo ejecutar la traducción.';
+            $message_type = 'error';
+        }
+    }
+    
+    if (isset($_POST['save_rss_item'])) {
+        $active_tab = 'rss';
+        $idx = intval($_POST['save_rss_item']);
+        $titles = $_POST['rss_title'] ?? [];
+        $descs  = $_POST['rss_description'] ?? [];
+        $urls   = $_POST['rss_url'] ?? [];
+        if (!file_exists($rss_file) || !is_writable($rss_file)) {
+            $message = 'No se puede escribir en rss.xml.'; $message_type = 'error';
+        } elseif (!isset($titles[$idx]) || !isset($descs[$idx]) || !isset($urls[$idx])) {
+            $message = 'Datos incompletos para actualizar la entrada seleccionada.'; $message_type = 'error';
+        } else {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $dom->preserveWhiteSpace = false;
+            $dom->formatOutput = true;
+            if (@$dom->load($rss_file) === false) {
+                $message = 'rss.xml mal formado.'; $message_type = 'error';
+            } else {
+                $items = $dom->getElementsByTagName('item');
+                if ($idx < 0 || $idx >= $items->length) {
+                    $message = 'No se encontró la entrada solicitada en rss.xml.'; $message_type = 'error';
+                } else {
+                    $item = $items->item($idx);
+                    $titleNode = dom_ensure_child($dom, $item, 'title');
+                    dom_set_content($dom, $titleNode, (string)$titles[$idx], false);
+                    $linkNode = dom_ensure_child($dom, $item, 'link');
+                    dom_set_content($dom, $linkNode, (string)$urls[$idx], false);
+                    $descNode = dom_ensure_child($dom, $item, 'description');
+                    dom_set_content($dom, $descNode, (string)$descs[$idx], true);
+                    $contentNode = dom_ensure_child($dom, $item, 'encoded', 'http://purl.org/rss/1.0/modules/content/', 'content:encoded');
+                    dom_set_content($dom, $contentNode, (string)$descs[$idx], true);
+                    if (safe_dom_save($dom, $rss_file)) {
+                        $message = 'Entrada actualizada en rss.xml.'; $message_type = 'success';
+                    } else {
+                        $message = 'No se pudo guardar rss.xml.'; $message_type = 'error';
+                    }
+                }
+            }
+        }
+    }
+
+    if (isset($_POST['delete_rss_item'])) {
+        $active_tab = 'rss';
+        $idx = intval($_POST['delete_rss_item']);
+        if (!file_exists($rss_file) || !is_writable($rss_file)) {
+            $message = 'No se puede escribir en rss.xml.'; $message_type = 'error';
+        } else {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $dom->preserveWhiteSpace = false;
+            $dom->formatOutput = true;
+            if (@$dom->load($rss_file) === false) {
+                $message = 'rss.xml mal formado.'; $message_type = 'error';
+            } else {
+                $items = $dom->getElementsByTagName('item');
+                if ($idx < 0 || $idx >= $items->length) {
+                    $message = 'No se encontró la entrada a borrar.'; $message_type = 'error';
+                } else {
+                    $item = $items->item($idx);
+                    $item->parentNode->removeChild($item);
+                    if (safe_dom_save($dom, $rss_file)) {
+                        $message = 'Entrada eliminada de rss.xml.'; $message_type = 'success';
+                    } else {
+                        $message = 'No se pudo guardar rss.xml tras eliminar.'; $message_type = 'error';
+                    }
+                }
+            }
+        }
+    }
+
+    if (isset($_POST['save_rss_en_item'])) {
+        $active_tab = 'traduccion';
+        $idx = intval($_POST['save_rss_en_item']);
+        $titles = $_POST['rss_en_title'] ?? [];
+        $descs  = $_POST['rss_en_description'] ?? [];
+        $urls   = $_POST['rss_en_url'] ?? [];
+        if (!file_exists($rss_en_file) || !is_writable($rss_en_file)) {
+            $message = 'No se puede escribir en ' . htmlspecialchars($target_feed_filename) . '.'; $message_type = 'error';
+        } elseif (!isset($titles[$idx]) || !isset($descs[$idx]) || !isset($urls[$idx])) {
+            $message = 'Datos incompletos para actualizar la entrada traducida.'; $message_type = 'error';
+        } else {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $dom->preserveWhiteSpace = false;
+            $dom->formatOutput = true;
+            if (@$dom->load($rss_en_file) === false) {
+                $message = $target_feed_filename . ' está mal formado.'; $message_type = 'error';
+            } else {
+                $items = $dom->getElementsByTagName('item');
+                if ($idx < 0 || $idx >= $items->length) {
+                    $message = 'No se encontró la entrada traducida a actualizar.'; $message_type = 'error';
+                } else {
+                    $item = $items->item($idx);
+                    $titleNode = dom_ensure_child($dom, $item, 'title');
+                    dom_set_content($dom, $titleNode, (string)$titles[$idx], false);
+                    $linkNode = dom_ensure_child($dom, $item, 'link');
+                    dom_set_content($dom, $linkNode, (string)$urls[$idx], false);
+                    $descNode = dom_ensure_child($dom, $item, 'description');
+                    dom_set_content($dom, $descNode, (string)$descs[$idx], true);
+                    $contentNode = dom_ensure_child($dom, $item, 'encoded', 'http://purl.org/rss/1.0/modules/content/', 'content:encoded');
+                    dom_set_content($dom, $contentNode, (string)$descs[$idx], true);
+                    if (safe_dom_save($dom, $rss_en_file)) {
+                        $message = 'Entrada actualizada en ' . $target_feed_filename . '.'; $message_type = 'success';
+                    } else {
+                        $message = 'No se pudo guardar ' . $target_feed_filename . '.'; $message_type = 'error';
+                    }
+                }
+            }
+        }
+    }
+
+    if (isset($_POST['delete_rss_en_item'])) {
+        $active_tab = 'traduccion';
+        $idx = intval($_POST['delete_rss_en_item']);
+        if (!file_exists($rss_en_file) || !is_writable($rss_en_file)) {
+            $message = 'No se puede escribir en ' . htmlspecialchars($target_feed_filename) . '.'; $message_type = 'error';
+        } else {
+            $dom = new DOMDocument('1.0', 'UTF-8');
+            $dom->preserveWhiteSpace = false;
+            $dom->formatOutput = true;
+            if (@$dom->load($rss_en_file) === false) {
+                $message = $target_feed_filename . ' está mal formado.'; $message_type = 'error';
+            } else {
+                $items = $dom->getElementsByTagName('item');
+                if ($idx < 0 || $idx >= $items->length) {
+                    $message = 'No se encontró la entrada traducida a borrar.'; $message_type = 'error';
+                } else {
+                    $item = $items->item($idx);
+                    $item->parentNode->removeChild($item);
+                    if (safe_dom_save($dom, $rss_en_file)) {
+                        $message = 'Entrada eliminada de ' . $target_feed_filename . '.'; $message_type = 'success';
+                    } else {
+                        $message = 'No se pudo guardar ' . $target_feed_filename . ' tras eliminar.'; $message_type = 'error';
+                    }
+                }
+            }
+        }
+    }
+
 if (isset($_POST['action'])) {
     $sugerencias  = json_decode(@file_get_contents($sugerencias_file), true) ?: [];
     $examples     = json_decode(@file_get_contents($examples_file), true) ?: [];
@@ -667,56 +898,25 @@ if (isset($_POST['action'])) {
 
     if ($suggestion_index !== false) {
         $suggestion = $sugerencias[$suggestion_index];
-        $finalMessage = '';
-        $rawSummary = '';
-        $decision = '';
+        $finalMessage = ''; $decision = '';
+        $descPlain = '';
         switch ($_POST['action']) {
-            case 'approve': $rawSummary = $suggestion['summary']; $decision = 'enviada';   break;
-            case 'edit':    $rawSummary = $_POST['summary'];       $decision = 'editada';  break;
+            case 'approve': $finalMessage = $suggestion['summary']; $decision = 'enviada';   break;
+            case 'edit':    $finalMessage = $_POST['summary'];       $decision = 'editada';  break;
             case 'reject':                                           $decision = 'descartada';   break;
-        }
-        $editedTitle = trim($_POST['edited_title'] ?? '');
-        $finalMessage = $rawSummary;
-        $posted_link = trim($_POST['link'] ?? '');
-        $original_link = $suggestion['link'] ?? '';
-        $auto_link = extract_url_from_text($rawSummary);
-
-        $finalLink = $posted_link;
-        if ($finalLink === '' && $auto_link !== '') {
-            $finalLink = $auto_link;
-        }
-        if ($finalLink === '') {
-            $finalLink = $original_link;
-        }
-
-        if ($auto_link !== '' && normalize_url_compare($posted_link) === normalize_url_compare($original_link)
-            && normalize_url_compare($auto_link) !== normalize_url_compare($original_link)) {
-            $finalLink = $auto_link;
         }
         // Añadir entrada al RSS (sin Telegram)
         if (!empty($finalMessage)) {
-            $titleForSanitize = $editedTitle !== '' ? $editedTitle : ($suggestion['title'] ?? '');
-            $cleanFinal = sanitize_feed_html($titleForSanitize, $finalMessage, $finalLink);
-            if ($cleanFinal !== '') {
-                $finalMessage = $cleanFinal;
-            } else {
-                $finalMessage = trim((string)$finalMessage);
+            $descPlain = telex_description_plain($finalMessage, $suggestion['title'] ?? '');
+            if ($descPlain === '') {
+                $descPlain = trim((string)$finalMessage);
             }
-            $derivedTitle = rtrim(derive_title_from_summary($finalMessage), " .,:;–—-");
-            $fallbackTitle = rtrim($suggestion['title'] ?? '', " .,:;–—-");
-            if ($editedTitle !== '') {
-                $finalTitle = rtrim($editedTitle, " .,:;–—-");
-            } else {
-                $finalTitle = $derivedTitle !== '' ? $derivedTitle : $fallbackTitle;
-            }
-            if ($finalTitle === '') {
-                $finalTitle = $fallbackTitle;
-            }
-            // Cargar o crear rss.xml
-            libxml_use_internal_errors(true);
-            if (file_exists($rss_file)) {
-                $rss = simplexml_load_file($rss_file);
-            } else {
+            if ($descPlain !== '') {
+                // Cargar o crear rss.xml
+                libxml_use_internal_errors(true);
+                if (file_exists($rss_file)) {
+                    $rss = simplexml_load_file($rss_file);
+                } else {
                 $rss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
                 $rss->channel->addChild('title', 'Maximalismo — Noticias (ES)');
                 $rss->channel->addChild('link', 'https://maximalismo.org/feed/');
@@ -734,12 +934,18 @@ if (isset($_POST['action'])) {
                 }
             }
 
-            $link = $finalLink;
-            $guid = $link !== '' ? $link : ('telex:' . md5(($suggestion['title'] ?? '') . '|' . $finalMessage . '|' . microtime(true)));
+            $link = $suggestion['link'] ?? '';
+            $guid = $link !== '' ? $link : ('telex:' . md5(($suggestion['title'] ?? '') . '|' . $descPlain . '|' . microtime(true)));
             if (!isset($existingKeys[$guid])) {
                 $item = $rss->channel->addChild('item');
-                $itemTitle = $finalTitle !== '' ? $finalTitle : $fallbackTitle;
-                $item->addChild('title', htmlspecialchars($itemTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                $derived = derive_title_from_summary($descPlain);
+                if ($derived !== '') {
+                    $descPlain = telex_description_plain($descPlain, $derived);
+                    if ($descPlain === '') {
+                        $descPlain = trim((string)$finalMessage);
+                    }
+                }
+                $item->addChild('title', htmlspecialchars($derived !== '' ? $derived : ($suggestion['title'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
                 if ($link) { $item->addChild('link', htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')); }
                 $item->addChild('guid', htmlspecialchars($guid, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
                 $descNode = $item->addChild('description');
@@ -747,17 +953,18 @@ if (isset($_POST['action'])) {
                 $descDom = dom_import_simplexml($descNode);
                 if ($descDom) {
                     $ownerDoc = $descDom->ownerDocument;
-                    $descDom->appendChild($ownerDoc->createCDATASection($finalMessage));
+                    $descDom->appendChild($ownerDoc->createCDATASection($descPlain));
                 } else {
-                    $item->description = $finalMessage;
+                    $item->description = $descPlain;
                 }
-                // Añadir content:encoded con el mismo HTML
+                // Añadir content:encoded con HTML estructurado
                 $contentNode = $item->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/');
                 if ($contentNode) {
                     $contentDom = dom_import_simplexml($contentNode);
                     if ($contentDom) {
                         $ownerDoc = $contentDom->ownerDocument;
-                        $contentDom->appendChild($ownerDoc->createCDATASection($finalMessage));
+                        $contentHtml = telex_build_html_from_text($descPlain);
+                        $contentDom->appendChild($ownerDoc->createCDATASection($contentHtml));
                     }
                 }
                 $item->addChild('pubDate', date(DATE_RSS));
@@ -784,20 +991,17 @@ if (isset($_POST['action'])) {
                 }
 
                 // Guardar rss.xml con formato
-                $dom = new DOMDocument('1.0', 'UTF-8');
-                $dom->preserveWhiteSpace = false;
-                $dom->formatOutput = true;
-                $dom->loadXML($rss->asXML());
-                $dom->save($rss_file);
+                telex_save_rss_document($rss, $rss_file);
             }
 
-            $published[] = ['title' => $finalTitle !== '' ? $finalTitle : ($suggestion['title'] ?? ''), 'text' => $finalMessage, 'timestamp' => date('c')];
+                $published[] = ['title' => $suggestion['title'], 'text' => $descPlain, 'timestamp' => date('c')];
+            }
         }
-        $examples[] = [ 'title' => $suggestion['title'], 'link'  => $suggestion['link'], 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => !empty($finalMessage) ? $finalMessage : $suggestion['summary'] ];
+        $examples[] = [ 'title' => $suggestion['title'], 'link'  => $suggestion['link'], 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => !empty($descPlain) ? $descPlain : $suggestion['summary'] ];
         $sent_titles[] = $suggestion['title'];
         $sent_titlekeys[] = title_key($suggestion['title']);
-        if ($editedTitle !== '') {
-            $sent_titlekeys[] = title_key($editedTitle);
+        if (!empty($_POST['edited_title'])) {
+            $sent_titlekeys[] = title_key($_POST['edited_title']);
         }
         array_splice($sugerencias, $suggestion_index, 1);
         file_put_contents($sugerencias_file, json_encode($sugerencias, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -811,47 +1015,7 @@ if (isset($_POST['action'])) {
 }
     if (isset($_POST['save_prompt'])) { file_put_contents($prompt_file, $_POST['prompt_text']); $message = "Prompt guardado con éxito."; $message_type = 'success'; }
     if (isset($_POST['save_sources'])) { $sources = []; if (isset($_POST['source_name'])) { for ($i = 0; $i < count($_POST['source_name']); $i++) { if (!empty($_POST['source_name'][$i]) && !empty($_POST['source_url'][$i])) { $sources[] = ['name' => $_POST['source_name'][$i], 'url' => $_POST['source_url'][$i]]; } } } file_put_contents($sources_file, json_encode($sources, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)); $message = "Fuentes guardadas con éxito."; $message_type = 'success'; }
-    if (isset($_POST['save_rss']) || isset($_POST['save_rss_item'])) {
-        $active_tab = 'rss';
-        if (file_exists($rss_file) && is_writable($rss_file)) {
-            libxml_use_internal_errors(true);
-            $xml = simplexml_load_file($rss_file);
-            if ($xml && isset($xml->channel->item)) {
-                $count = count($xml->channel->item);
-                $targetIdx = null;
-                if (isset($_POST['save_rss_item'])) {
-                    $idx = intval($_POST['save_rss_item']);
-                    if ($idx >= 0 && $idx < $count) {
-                        $targetIdx = $idx;
-                    }
-                }
-                for ($i = 0; $i < $count; $i++) {
-                    if ($targetIdx !== null && $i !== $targetIdx) {
-                        continue;
-                    }
-                    if (isset($_POST['rss_title'][$i])) {
-                        $postedTitle = $_POST['rss_title'][$i];
-                        $postedDesc  = $_POST['rss_description'][$i] ?? '';
-                        $postedLink  = $_POST['rss_url'][$i] ?? '';
-                        $xml->channel->item[$i]->title = rtrim($postedTitle, " .,:;–—-");
-                        $xml->channel->item[$i]->description = sanitize_feed_html($postedTitle, $postedDesc, $postedLink);
-                        $xml->channel->item[$i]->link = $postedLink;
-                    }
-                }
-                $dom = new DOMDocument('1.0');
-                $dom->preserveWhiteSpace = false;
-                $dom->formatOutput = true;
-                $dom->loadXML($xml->asXML());
-                $dom->save($rss_file);
-                $message = $targetIdx !== null ? 'Entrada actualizada en rss.xml.' : 'Fichero rss.xml guardado con éxito.';
-                $message_type = 'success';
-            } else {
-                $message = "Error: El fichero rss.xml está mal formado."; $message_type = 'error';
-            }
-        } else {
-            $message = "Error: No se encontró o no se puede escribir en rss.xml."; $message_type = 'error';
-        }
-    }
+    if (isset($_POST['save_rss'])) { if (file_exists($rss_file) && is_writable($rss_file)) { libxml_use_internal_errors(true); $xml = simplexml_load_file($rss_file); if ($xml && isset($xml->channel->item)) { for ($i = 0; $i < count($xml->channel->item); $i++) { if (isset($_POST['rss_title'][$i])) { $xml->channel->item[$i]->title = $_POST['rss_title'][$i]; $xml->channel->item[$i]->description = $_POST['rss_description'][$i]; $xml->channel->item[$i]->link = $_POST['rss_url'][$i]; } } $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace = false; $dom->formatOutput = true; $dom->loadXML($xml->asXML()); $dom->save($rss_file); $message = "Fichero rss.xml guardado con éxito."; $message_type = 'success'; } else { $message = "Error: El fichero rss.xml está mal formado."; $message_type = 'error'; } } else { $message = "Error: No se encontró o no se puede escribir en rss.xml."; $message_type = 'error'; } }
     // Eliminar seleccionados de RSS
     if (isset($_POST['delete_rss_selected'])) {
         $active_tab = 'rss';
@@ -942,7 +1106,7 @@ if (isset($_POST['action'])) {
             }
         }
     }
-    if (isset($_POST['save_rss_en']) || isset($_POST['save_rss_en_item'])) {
+    if (isset($_POST['save_rss_en'])) {
         libxml_use_internal_errors(true);
         $xml = null;
         if (file_exists($rss_en_file)) {
@@ -958,25 +1122,11 @@ if (isset($_POST['action'])) {
         }
         if ($xml && isset($xml->channel)) {
             if (isset($xml->channel->item)) {
-                $count = count($xml->channel->item);
-                $targetIdx = null;
-                if (isset($_POST['save_rss_en_item'])) {
-                    $idx = intval($_POST['save_rss_en_item']);
-                    if ($idx >= 0 && $idx < $count) {
-                        $targetIdx = $idx;
-                    }
-                }
-                for ($i = 0; $i < $count; $i++) {
-                    if ($targetIdx !== null && $i !== $targetIdx) {
-                        continue;
-                    }
+                for ($i = 0; $i < count($xml->channel->item); $i++) {
                     if (isset($_POST['rss_en_title'][$i])) {
-                        $postedTitle = $_POST['rss_en_title'][$i];
-                        $postedDesc  = $_POST['rss_en_description'][$i] ?? '';
-                        $postedLink  = $_POST['rss_en_url'][$i] ?? '';
-                        $xml->channel->item[$i]->title = rtrim($postedTitle, " .,:;–—-");
-                        $xml->channel->item[$i]->description = sanitize_feed_html($postedTitle, $postedDesc, $postedLink);
-                        $xml->channel->item[$i]->link = $postedLink;
+                        $xml->channel->item[$i]->title = $_POST['rss_en_title'][$i];
+                        $xml->channel->item[$i]->description = $_POST['rss_en_description'][$i];
+                        $xml->channel->item[$i]->link = $_POST['rss_en_url'][$i];
                     }
                 }
             }
@@ -985,7 +1135,7 @@ if (isset($_POST['action'])) {
             $dom->formatOutput = true;
             $dom->loadXML($xml->asXML());
             if (safe_dom_save($dom, $rss_en_file)) {
-                $message = isset($_POST['save_rss_en_item']) ? 'Entrada actualizada en rss_' . htmlspecialchars($target_lang) . '.xml.' : "Fichero rss_" . htmlspecialchars($target_lang) . ".xml guardado con éxito.";
+                $message = "Fichero rss_" . htmlspecialchars($target_lang) . ".xml guardado con éxito.";
                 $message_type = 'success';
             } else {
                 $message = "No se pudo guardar rss_" . htmlspecialchars($target_lang) . ".xml.";
@@ -1136,17 +1286,34 @@ if (isset($_POST['action'])) {
 
     // Enviar un item individual a Telegram (forzar)
     if (isset($_POST['telegram_send_item'])) {
-        $active_tab = $_POST['from_tab'] ?? 'telegram';
-        $lang = strtolower(trim($_POST['lang'] ?? ''));
         $idx  = isset($_POST['idx']) ? intval($_POST['idx']) : (isset($_POST['telegram_send_item']) ? intval($_POST['telegram_send_item']) : -1);
+        $lang = strtolower(trim($_POST['lang'] ?? ''));
+        if ($lang === '' && isset($_POST['rss_item_lang']) && is_array($_POST['rss_item_lang']) && isset($_POST['rss_item_lang'][$idx])) {
+            $lang = strtolower((string)$_POST['rss_item_lang'][$idx]);
+        }
+        if ($lang === '' && isset($_POST['rss_en_item_lang']) && is_array($_POST['rss_en_item_lang']) && isset($_POST['rss_en_item_lang'][$idx])) {
+            $lang = strtolower((string)$_POST['rss_en_item_lang'][$idx]);
+        }
+        $from_tab = $_POST['from_tab'] ?? '';
+        if ($from_tab === '' && isset($_POST['rss_item_tab']) && is_array($_POST['rss_item_tab']) && isset($_POST['rss_item_tab'][$idx])) {
+            $from_tab = (string)$_POST['rss_item_tab'][$idx];
+        }
+        if ($from_tab === '' && isset($_POST['rss_en_item_tab']) && is_array($_POST['rss_en_item_tab']) && isset($_POST['rss_en_item_tab'][$idx])) {
+            $from_tab = (string)$_POST['rss_en_item_tab'][$idx];
+        }
+        if ($from_tab === '') { $from_tab = 'telegram'; }
+        $active_tab = $from_tab;
         $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
+        if ($lang === '') {
+            $message = 'No se indicó el idioma para enviar a Telegram.'; $message_type = 'error';
+        } else {
         $bot  = $bots[$lang] ?? null;
         if (!$bot || (is_array($bot) && (empty($bot['token']) || empty($bot['chat_id'])))) {
             $message = 'Falta token o chat ID para el idioma ' . htmlspecialchars($lang) . '.'; $message_type = 'error';
         } else {
             $token = is_array($bot) ? $bot['token'] : (string)$bot;
             $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
-            $feed_file = __DIR__ . '/' . feed_filename_for_lang($lang, $feed_custom);
+            $feed_file = ($lang === 'es') ? $rss_file : (__DIR__ . '/' . feed_filename_for_lang($lang, $feed_custom));
             libxml_use_internal_errors(true);
             $xml = simplexml_load_file($feed_file);
             if ($xml && isset($xml->channel->item[$idx])) {
@@ -1162,6 +1329,7 @@ if (isset($_POST['action'])) {
                 if ($resp['ok']) { $message = 'Entrada enviada a Telegram (' . htmlspecialchars($lang) . ').'; $message_type = 'success'; }
                 else { $message = 'Error al enviar a Telegram: ' . htmlspecialchars($resp['error']); $message_type = 'error'; }
             } else { $message = 'No se encontró el item solicitado.'; $message_type = 'error'; }
+        }
         }
     }
     // Añadir entrada manual (otras fuentes)
@@ -1191,10 +1359,17 @@ if (isset($_POST['action'])) {
             $imagePathRel = $imgUrlInput; // URL externa o ruta ya servida
         }
 
+        if (file_exists($rss_file) && !is_writable($rss_file)) {
+            $message = 'No se puede escribir en rss.xml.';
+            $message_type = 'error';
+            goto after_manual_item;
+        }
+
         // Cargar o crear rss.xml
         libxml_use_internal_errors(true);
-        if (file_exists($rss_file)) { $rss = simplexml_load_file($rss_file); }
-        else {
+        if (file_exists($rss_file)) {
+            $rss = simplexml_load_file($rss_file);
+        } else {
             $rss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
             $rss->channel->addChild('title', 'Maximalismo — Noticias (ES)');
             $rss->channel->addChild('link', 'https://maximalismo.org/feed/');
@@ -1203,51 +1378,53 @@ if (isset($_POST['action'])) {
             $rss->channel->addChild('pubDate', date(DATE_RSS));
         }
 
+        if (!$rss || !isset($rss->channel)) {
+            $message = 'rss.xml mal formado, no se pudo cargar.';
+            $message_type = 'error';
+            goto after_manual_item;
+        }
+
         // Evitar duplicados por link/guid
         $existingKeys = [];
         if (isset($rss->channel->item)) {
             foreach ($rss->channel->item as $it) {
-                $ek = trim((string)($it->link ?? '')) ?: trim((string)($it->guid ?? ''));
+                $linkKey = trim(html_entity_decode((string)($it->link ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                $guidKey = trim(html_entity_decode((string)($it->guid ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                $ek = $linkKey !== '' ? $linkKey : $guidKey;
                 if ($ek !== '') $existingKeys[$ek] = true;
             }
         }
 
         if ($title !== '') {
-            $cleanDesc = sanitize_feed_html($title, $desc, $link);
-            if ($cleanDesc !== '') {
-                $desc = $cleanDesc;
-            } else {
-                $desc = trim((string)$desc);
+            $descPlain = telex_description_plain($desc, $title);
+            if ($descPlain === '') {
+                $descPlain = trim((string)$desc);
             }
-            $guid = $link !== '' ? $link : ('telex:' . md5($title . '|' . $desc . '|' . microtime(true)));
-            if (!isset($existingKeys[$guid])) {
-                $htmlDesc = $desc;
-                if ($imagePathRel !== '') {
-                    $safeImg = htmlspecialchars($imagePathRel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                    $htmlDesc = '<p><img src="' . $safeImg . '" alt="" style="max-width:100%; height:auto;" /></p>' . $htmlDesc;
-                }
-
+            $guid = $link !== '' ? $link : ('telex:' . md5($title . '|' . $descPlain . '|' . microtime(true)));
+            $keyToCheck = trim(html_entity_decode($link !== '' ? $link : $guid, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+            if (!isset($existingKeys[$keyToCheck])) {
                 $item = $rss->channel->addChild('item');
                 $item->addChild('title', htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
                 if ($link) { $item->addChild('link', htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')); }
                 $item->addChild('guid', htmlspecialchars($guid, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
 
-                // description CDATA
+                // description como texto plano
                 $descNode = $item->addChild('description');
                 $descNode[0] = null;
                 $descDom = dom_import_simplexml($descNode);
                 if ($descDom) {
                     $ownerDoc = $descDom->ownerDocument;
-                    $descDom->appendChild($ownerDoc->createCDATASection($htmlDesc));
-                } else { $item->description = $htmlDesc; }
+                    $descDom->appendChild($ownerDoc->createCDATASection($descPlain));
+                } else { $item->description = $descPlain; }
 
-                // content:encoded CDATA
+                // content:encoded con HTML enriquecido (imagen opcional)
                 $contentNode = $item->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/');
                 if ($contentNode) {
                     $contentDom = dom_import_simplexml($contentNode);
                     if ($contentDom) {
                         $ownerDoc = $contentDom->ownerDocument;
-                        $contentDom->appendChild($ownerDoc->createCDATASection($htmlDesc));
+                        $contentHtml = telex_build_html_from_text($descPlain, $imagePathRel);
+                        $contentDom->appendChild($ownerDoc->createCDATASection($contentHtml));
                     }
                 }
 
@@ -1265,28 +1442,26 @@ if (isset($_POST['action'])) {
 
                 $item->addChild('pubDate', date(DATE_RSS));
 
-                // Guardar rss.xml con formato
-                $dom = new DOMDocument('1.0', 'UTF-8');
-                $dom->preserveWhiteSpace = false;
-                $dom->formatOutput = true;
-                $dom->loadXML($rss->asXML());
-                $dom->save($rss_file);
+                // Guardar rss.xml ordenado y sin duplicados
+                if (!telex_save_rss_document($rss, $rss_file)) {
+                    $message = 'No se pudo guardar rss.xml tras añadir la entrada.';
+                    $message_type = 'error';
+                    goto after_manual_item;
+                }
 
                 $message = 'Entrada añadida a rss.xml.';
                 $message_type = 'success';
 
                 // Envío automático a Telegram (ES) si está activado y hay bot/chat configurados
-                $auto = strtolower((string)($env_vars['TELEGRAM_AUTO_SEND_ES'] ?? '1'));
-                $auto_enabled = !in_array($auto, ['0','false','off','no'], true);
+                $auto_enabled = telex_flag_enabled(telex_config_get($config, ['telegram', 'auto_send', 'es'], true));
                 if ($auto_enabled) {
                     $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
                     $bot  = $bots['es'] ?? null;
                     if ($bot && (!is_array($bot) || (!empty($bot['token']) && !empty($bot['chat_id'])))) {
                         $token = is_array($bot) ? $bot['token'] : (string)$bot;
                         $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
-                        $desc_plain = trim(html_entity_decode(strip_tags($htmlDesc), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
                         if ($token && $chat) {
-                            $resp = tg_send($token, $chat, $title, $desc_plain, ($link ?? ''), ($imagePathRel ?? ''));
+                            $resp = tg_send($token, $chat, $title, $descPlain, ($link ?? ''), ($imagePathRel ?? ''));
                             // Registrar como enviado
                             $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
                             if (!isset($sent['es'])) { $sent['es'] = []; }
@@ -1308,13 +1483,15 @@ if (isset($_POST['action'])) {
             $message = 'Falta el título.';
             $message_type = 'error';
         }
+
+        after_manual_item:
+        ;
     }
 
     // Envío automático a Telegram al aprobar (ES) si está activado
     if (isset($_POST['action']) && ($_POST['action'] === 'approve' || $_POST['action'] === 'edit')) {
         // Nota: El bloque de aprobación anterior ya guardó en rss.xml
-        $auto = strtolower((string)($env_vars['TELEGRAM_AUTO_SEND_ES'] ?? '1'));
-        $auto_enabled = !in_array($auto, ['0','false','off','no'], true);
+        $auto_enabled = telex_flag_enabled(telex_config_get($config, ['telegram', 'auto_send', 'es'], true));
         if ($auto_enabled) {
             $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
             $bot  = $bots['es'] ?? null;
@@ -1333,7 +1510,11 @@ if (isset($_POST['action'])) {
                         $link  = (string)($it->link ?? '');
                         $guid  = (string)($it->guid ?? '');
                         $key   = $link !== '' ? $link : $guid;
-                        $desc_plain = trim(html_entity_decode(strip_tags($finalMessage), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                        $desc_from_feed = isset($it->description) ? (string)$it->description : '';
+                        $desc_plain = telex_description_plain($desc_from_feed, $title);
+                        if ($desc_plain === '' && !empty($finalMessage)) {
+                            $desc_plain = telex_description_plain($finalMessage, $title);
+                        }
                         $text = trim($title . "\n\n" . $desc_plain . "\n\n" . ($link ?? ''));
                         if ($token && $chat && ($title !== '' || $desc_plain !== '' || ($link ?? '') !== '')) {
                             $resp = tg_send($token, $chat, $title, $desc_plain, ($link ?? ''), '');
@@ -1353,76 +1534,40 @@ if (isset($_POST['action'])) {
         }
     }
 
-    // Guardar configuración (pm2_env.json)
+    // Guardar configuración centralizada
     if (isset($_POST['save_config'])) {
-        $new_env = array_merge($env_defaults, $env_vars);
-        $new_env['GEMINI_API_KEY'] = trim($_POST['gemini_api_key'] ?? '');
-        $new_env['GEMINI_MODEL'] = trim($_POST['gemini_model'] ?? 'gemini-1.5-flash-latest');
-        $new_env['GOOGLE_TRANSLATE_API_KEY'] = trim($_POST['google_translate_api_key'] ?? '');
-        $new_env['TELEGRAM_AUTO_SEND_ES'] = isset($_POST['telegram_auto_send_es']) ? '1' : '0';
-        if (isset($_POST['pm2_bin'])) { $new_env['PM2_BIN'] = trim($_POST['pm2_bin']); }
-        if (!empty($_POST['translator_lang'])) { $new_env['TRANSLATOR_TARGET_LANG'] = strtolower(trim($_POST['translator_lang'])); }
+        $geminiKey = trim((string)($_POST['gemini_api_key'] ?? ''));
+        $geminiModel = trim((string)($_POST['gemini_model'] ?? 'gemini-1.5-flash-latest'));
+        $translateKey = trim((string)($_POST['google_translate_api_key'] ?? ''));
+        $autoSendEs = isset($_POST['telegram_auto_send_es']);
+        $translatorLang = strtolower(trim((string)($_POST['translator_lang'] ?? '')));
 
-        $new_target = strtolower($new_env['TRANSLATOR_TARGET_LANG'] ?? 'en');
-        $rss_en_file = __DIR__ . '/' . feed_filename_for_lang($new_target, $feed_custom);
-        $new_env['INPUT_RSS'] = $rss_file;
-        $new_env['OUTPUT_RSS'] = $rss_en_file;
-        if (!isset($new_env['TRANSLATOR_INTERVAL_MS']) || $new_env['TRANSLATOR_INTERVAL_MS'] === '') {
-            $new_env['TRANSLATOR_INTERVAL_MS'] = '60000';
+        telex_config_set($config, ['apis', 'gemini', 'api_key'], $geminiKey);
+        telex_config_set($config, ['apis', 'gemini', 'model'], $geminiModel !== '' ? $geminiModel : 'gemini-1.5-flash-latest');
+        telex_config_set($config, ['apis', 'google_translate', 'api_key'], $translateKey);
+        telex_config_set($config, ['telegram', 'auto_send', 'es'], $autoSendEs);
+
+        if ($translatorLang !== '') {
+            telex_config_set($config, ['translator', 'target_language'], $translatorLang);
+            $target_lang = $translatorLang;
+            $translated_lang_name = lang_name_es($target_lang);
+            $translations = $config['feeds']['translations'] ?? [];
+            $translations[$target_lang] = feed_filename_for_lang($target_lang, $feed_custom);
+            telex_config_set($config, ['feeds', 'translations'], $translations);
+            $rss_en_file = __DIR__ . '/' . $translations[$target_lang];
         }
 
-        if (!save_pm2_env($pm2_env_file, $new_env)) {
+        if (isset($_POST['translator_interval_ms'])) {
+            $interval = max(1000, (int)$_POST['translator_interval_ms']);
+            telex_config_set($config, ['translator', 'interval_ms'], $interval);
+        }
+
+        if (telex_save_config($config)) {
+            $message = 'Configuración guardada.';
+            $message_type = 'success';
+        } else {
             $message = 'No se pudo guardar la configuración.';
             $message_type = 'error';
-        } else {
-            $env_vars = $new_env;
-            $target_lang = $new_target;
-            $translated_lang_name = lang_name_es($target_lang);
-            $message = "Configuración guardada.";
-            $message_type = 'success';
-        }
-    }
-
-    // Reiniciar PM2 (traductor RSS)
-    if (isset($_POST['restart_pm2'])) {
-        $active_tab = 'config';
-        $pm2_bin = $env_vars['PM2_BIN'] ?? 'pm2';
-        if (!preg_match('/^[A-Za-z0-9_\/.\-]+$/', $pm2_bin)) { $pm2_bin = 'pm2'; }
-        $cmd = $pm2_bin . ' restart rss-translator 2>&1';
-        $out = @shell_exec($cmd);
-        if ($out === null) {
-            $message = "No se pudo ejecutar PM2. Verifica permisos/PM2_BIN.";
-            $message_type = 'error';
-        } else {
-            $message = "PM2 reiniciado (rss-translator).";
-            $message_type = 'success';
-        }
-    }
-
-    // Regenerar data/pm2_env.json y reiniciar PM2
-    if (isset($_POST['regen_pm2_env_restart'])) {
-        $active_tab = 'config';
-        // Regenerar pm2_env.json con valores actuales
-        $current_target = strtolower($env_vars['TRANSLATOR_TARGET_LANG'] ?? $target_lang ?? 'en');
-        $pm2_env = array_merge($env_defaults, $env_vars);
-        $pm2_env['INPUT_RSS'] = $rss_file;
-        $pm2_env['OUTPUT_RSS'] = __DIR__ . '/' . feed_filename_for_lang($current_target, $feed_custom);
-        if (!isset($pm2_env['TRANSLATOR_INTERVAL_MS']) || $pm2_env['TRANSLATOR_INTERVAL_MS'] === '') {
-            $pm2_env['TRANSLATOR_INTERVAL_MS'] = '60000';
-        }
-        $ok = save_pm2_env($pm2_env_file, $pm2_env);
-        if (!$ok) {
-            $message = 'No se pudo escribir data/pm2_env.json.'; $message_type = 'error';
-        } else {
-            $pm2_bin = $env_vars['PM2_BIN'] ?? 'pm2';
-            if (!preg_match('/^[A-Za-z0-9_\/.\-]+$/', $pm2_bin)) { $pm2_bin = 'pm2'; }
-            $cmd = $pm2_bin . ' restart rss-translator 2>&1';
-            $out = @shell_exec($cmd);
-            if ($out === null) {
-                $message = 'pm2_env.json regenerado, pero no se pudo ejecutar PM2.'; $message_type = 'error';
-            } else {
-                $message = 'pm2_env.json regenerado y PM2 reiniciado (rss-translator).'; $message_type = 'success';
-            }
         }
     }
 
@@ -1496,8 +1641,8 @@ if (isset($_POST['action'])) {
     // Probar Gemini (usa configuración guardada o lo enviado en el formulario principal si existe)
     if (isset($_POST['test_gemini'])) {
         $active_tab = 'config';
-        $test_key   = $_POST['gemini_api_key'] ?? ($env_vars['GEMINI_API_KEY'] ?? '');
-        $test_model = $_POST['gemini_model']   ?? ($env_vars['GEMINI_MODEL']   ?? 'gemini-1.5-flash-latest');
+        $test_key   = $_POST['gemini_api_key'] ?? telex_config_get($config, ['apis', 'gemini', 'api_key'], '');
+        $test_model = $_POST['gemini_model']   ?? telex_config_get($config, ['apis', 'gemini', 'model'], 'gemini-1.5-flash-latest');
         if (!$test_key) {
             $message = "Falta GEMINI_API_KEY.";
             $message_type = 'error';
@@ -1535,7 +1680,7 @@ if (isset($_POST['action'])) {
     // Probar Google Translate (usa configuración guardada o enviada)
     if (isset($_POST['test_translate'])) {
         $active_tab = 'config';
-        $tr_key = $_POST['google_translate_api_key'] ?? ($env_vars['GOOGLE_TRANSLATE_API_KEY'] ?? '');
+        $tr_key = $_POST['google_translate_api_key'] ?? telex_config_get($config, ['apis', 'google_translate', 'api_key'], '');
         if (!$tr_key) {
             $message = "Falta GOOGLE_TRANSLATE_API_KEY.";
             $message_type = 'error';
@@ -1573,21 +1718,17 @@ if (isset($_POST['action'])) {
         if ($new_lang === '') {
             $message = 'Selecciona un idioma válido.'; $message_type = 'error';
         } else {
-            $new_env = array_merge($env_defaults, $env_vars);
-            $new_env['TRANSLATOR_TARGET_LANG'] = $new_lang;
-            $new_env['OUTPUT_RSS'] = __DIR__ . '/' . feed_filename_for_lang($new_lang, $feed_custom);
-            $new_env['INPUT_RSS'] = $rss_file;
-            if (!isset($new_env['TRANSLATOR_INTERVAL_MS']) || $new_env['TRANSLATOR_INTERVAL_MS'] === '') {
-                $new_env['TRANSLATOR_INTERVAL_MS'] = '60000';
-            }
-            if (!save_pm2_env($pm2_env_file, $new_env)) {
-                $message = 'No se pudo actualizar la configuración.'; $message_type = 'error';
-            } else {
-                $env_vars = $new_env;
+            telex_config_set($config, ['translator', 'target_language'], $new_lang);
+            $translations = $config['feeds']['translations'] ?? [];
+            $translations[$new_lang] = feed_filename_for_lang($new_lang, $feed_custom);
+            telex_config_set($config, ['feeds', 'translations'], $translations);
+            if (telex_save_config($config)) {
                 $target_lang = $new_lang;
                 $translated_lang_name = lang_name_es($target_lang);
-                $rss_en_file = __DIR__ . '/' . feed_filename_for_lang($target_lang, $feed_custom);
-                $message = 'Idioma de traducción actualizado a ' . htmlspecialchars($translated_lang_name) . '.'; $message_type = 'success';
+                $rss_en_file = __DIR__ . '/' . $translations[$target_lang];
+                $message = 'Idioma de traducción actualizado a ' . htmlspecialchars($translated_lang_name) . ' (' . htmlspecialchars($translations[$target_lang]) . ').'; $message_type = 'success';
+            } else {
+                $message = 'No se pudo actualizar la configuración.'; $message_type = 'error';
             }
         }
     }
@@ -1661,6 +1802,15 @@ if (isset($_POST['action'])) {
         $feed_custom[$lang]['title']    = $new_title;
         $feed_custom[$lang]['description'] = $new_desc;
         @file_put_contents($feed_custom_file, json_encode($feed_custom, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        $translations = $config['feeds']['translations'] ?? [];
+        $translations[$lang] = $new_name;
+        telex_config_set($config, ['feeds', 'translations'], $translations);
+        telex_save_config($config);
+        if ($lang === $target_lang) {
+            $rss_en_file = $new_path;
+        }
+
         $message = 'Personalización de feed guardada para ' . htmlspecialchars($lang) . '.'; $message_type = 'success';
     }
 
@@ -1695,20 +1845,19 @@ $sources_actuales = file_exists($sources_file) ? json_decode(@file_get_contents(
 
 // Bots de Telegram guardados por idioma
 $telegram_bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
+$has_telegram = !empty($telegram_bots);
+$available_tabs = ['gemini', 'rss', 'traduccion', 'config', 'prompt', 'sources', 'gemini_log'];
+if ($has_telegram) { $available_tabs[] = 'telegram'; }
+if (!in_array($active_tab, $available_tabs, true)) { $active_tab = 'gemini'; }
 
 $rss_items_actuales = [];
 if (file_exists($rss_file)) {
     libxml_use_internal_errors(true);
     $rss_content = simplexml_load_file($rss_file);
     if ($rss_content && isset($rss_content->channel->item)) {
-        foreach($rss_content->channel->item as $item) { $rss_items_actuales[] = $item; }
-        usort($rss_items_actuales, function($a, $b) {
-            $ta = strtotime((string)($a->pubDate ?? ''));
-            $tb = strtotime((string)($b->pubDate ?? ''));
-            if ($ta === false) $ta = 0;
-            if ($tb === false) $tb = 0;
-            return $tb <=> $ta;
-        });
+        foreach ($rss_content->channel->item as $item) {
+            $rss_items_actuales[] = $item;
+        }
     }
 }
 
@@ -1717,14 +1866,9 @@ if (file_exists($rss_en_file)) {
     libxml_use_internal_errors(true);
     $comm_content = simplexml_load_file($rss_en_file);
     if ($comm_content && isset($comm_content->channel->item)) {
-        foreach ($comm_content->channel->item as $item) { $rss_en_items_actuales[] = $item; }
-        usort($rss_en_items_actuales, function($a, $b) {
-            $ta = strtotime((string)($a->pubDate ?? ''));
-            $tb = strtotime((string)($b->pubDate ?? ''));
-            if ($ta === false) $ta = 0;
-            if ($tb === false) $tb = 0;
-            return $tb <=> $ta;
-        });
+        foreach ($comm_content->channel->item as $item) {
+            $rss_en_items_actuales[] = $item;
+        }
     }
 }
 // Eliminado: lógica de envío a Communalia/Telegram
@@ -1761,6 +1905,15 @@ foreach (($feed_custom ?? []) as $lc => $cfg) {
     $fname = $cfg['filename'] ?? '';
     if ($fname && file_exists(__DIR__ . '/' . $fname)) {
         $active_lang_files[strtolower($lc)] = $fname;
+    }
+}
+// 2b) Incorporar correspondencias desde config.json
+$configTranslations = $config['feeds']['translations'] ?? [];
+foreach ($configTranslations as $lc => $fname) {
+    $fname = trim((string)$fname);
+    if ($fname === '') { continue; }
+    if (file_exists(__DIR__ . '/' . $fname)) {
+        $active_lang_files[strtolower((string)$lc)] = $fname;
     }
 }
 // 3) Incluir español base si existe rss.xml
@@ -1868,13 +2021,14 @@ if (!empty($telegram_bots)) {
         .button:hover { opacity: 0.9; }
         .button.approve { background-color: var(--success-color); }
         .button.reject { background-color: var(--danger-color); }
-        .message { padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; text-align: center; font-weight: 500; background-color: #000; color: #39ff14; font-family: 'Courier New', Courier, monospace; }
-        .message.success { color: #39ff14; }
-        .message.error { color: #ffef5a; }
+        .message { padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; text-align: center; font-weight: 500; }
+        .message.success { background-color: #d1e7dd; color: #0f5132; }
+        .message.error { background-color: #f8d7da; color: #842029; }
         .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--gray); margin-bottom: 1.5rem; }
         .tab-link { padding: 0.75rem 1.5rem; cursor: pointer; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 1rem; }
         .tab-link.active { border-bottom-color: var(--primary-color); font-weight: 600; }
         .tab-content { display: none; }
+        .tab-content.active { display: block; }
         .source-item { display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center; }
         .source-item input[name="source_name[]"] { flex-basis: 30%; }
         .source-item input[name="source_url[]"] { flex-basis: 60%; }
@@ -1895,7 +2049,7 @@ if (!empty($telegram_bots)) {
         <button type="submit" name="logout" value="1" class="button reject">Salir</button>
     </form>
     
-    <img src="telex.png" alt="Telex" style="float:right; width:60px; height:auto; object-fit:contain;" />
+    <a href="telex.php"><img src="telex.png" alt="Telex" style="float:right; width:60px; height:auto; object-fit:contain;" /></a>
     <h1 class="special-elite-regular">Telex</h1>
 
     <?php if ($message): ?>
@@ -1903,19 +2057,19 @@ if (!empty($telegram_bots)) {
     <?php endif; ?>
 
     <div class="tabs">
-        <button class="tab-link" onclick="openTab(event, 'gemini')">Telex</button>
-        <button class="tab-link" onclick="openTab(event, 'rss')">RSS</button>
-        <button class="tab-link" onclick="openTab(event, 'traduccion')">Traducción</button>
-        <?php $has_telegram = !empty($telegram_bots); if ($has_telegram): ?>
-            <button class="tab-link" onclick="openTab(event, 'telegram')">Telegram</button>
+        <a href="?tab=gemini" class="tab-link<?php echo $active_tab === 'gemini' ? ' active' : ''; ?>" data-tab="gemini">Telex</a>
+        <a href="?tab=rss" class="tab-link<?php echo $active_tab === 'rss' ? ' active' : ''; ?>" data-tab="rss">RSS</a>
+        <a href="?tab=traduccion" class="tab-link<?php echo $active_tab === 'traduccion' ? ' active' : ''; ?>" data-tab="traduccion">Traducción</a>
+        <?php if ($has_telegram): ?>
+            <a href="?tab=telegram" class="tab-link<?php echo $active_tab === 'telegram' ? ' active' : ''; ?>" data-tab="telegram">Telegram</a>
         <?php endif; ?>
-        <button class="tab-link" onclick="openTab(event, 'config')">Configuración</button>
-        <button class="tab-link" onclick="openTab(event, 'prompt')">Prompt</button>
-        <button class="tab-link" onclick="openTab(event, 'sources')">Fuentes</button>
-        <button class="tab-link" onclick="openTab(event, 'gemini_log')">Log</button>
+        <a href="?tab=config" class="tab-link<?php echo $active_tab === 'config' ? ' active' : ''; ?>" data-tab="config">Configuración</a>
+        <a href="?tab=prompt" class="tab-link<?php echo $active_tab === 'prompt' ? ' active' : ''; ?>" data-tab="prompt">Prompt</a>
+        <a href="?tab=sources" class="tab-link<?php echo $active_tab === 'sources' ? ' active' : ''; ?>" data-tab="sources">Fuentes</a>
+        <a href="?tab=gemini_log" class="tab-link<?php echo $active_tab === 'gemini_log' ? ' active' : ''; ?>" data-tab="gemini_log">Log</a>
     </div>
 
-    <div id="gemini" class="tab-content">
+    <div id="gemini" class="tab-content<?php echo $active_tab === 'gemini' ? ' active' : ''; ?>">
         <div class="item">
             <h2>Acciones</h2>
             <form method="post">
@@ -1928,21 +2082,16 @@ if (!empty($telegram_bots)) {
             <h2>Telex Pendientes</h2>
             <?php if (!empty($sugerencias_pendientes)): ?>
                 <?php foreach ($sugerencias_pendientes as $sug): ?>
-                    <?php
-                        $summary_link_auto = extract_url_from_text($sug['summary'] ?? '');
-                        $prefill_link = $summary_link_auto !== '' ? $summary_link_auto : ($sug['link'] ?? '');
-                    ?>
                     <div class="item">
                         <h3><?php echo htmlspecialchars($sug['title']); ?></h3>
                         <form method="post">
                             <input type="hidden" name="active_tab" value="gemini">
                             <input type="hidden" name="suggestion_id" value="<?php echo htmlspecialchars($sug['id']); ?>">
-                            <div class="form-group"><label>Título:</label><input type="text" name="edited_title" value="<?php echo htmlspecialchars($sug['title']); ?>" required></div>
-                            <div class="form-group"><label>URL:</label><input type="url" name="link" value="<?php echo htmlspecialchars($prefill_link); ?>" placeholder="https://..."></div>
                             <div class="form-group"><label>Resumen Sugerido:</label><textarea name="summary"><?php echo htmlspecialchars($sug['summary']); ?></textarea></div>
                             <div class="form-group"><p><strong>Enlace:</strong> <a href="<?php echo htmlspecialchars($sug['link']); ?>" target="_blank" rel="noopener noreferrer">Ver noticia original</a></p></div>
                             <div class="button-group">
-                                <button type="submit" name="action" value="edit" class="button">Guardar y publicar</button>
+                                <button type="submit" name="action" value="approve" class="button approve">Aprobar</button>
+                                <button type="submit" name="action" value="edit" class="button">Guardar y Aprobar</button>
                                 <button type="submit" name="action" value="reject" class="button reject">Rechazar</button>
                             </div>
                         </form>
@@ -1966,7 +2115,7 @@ if (!empty($telegram_bots)) {
         </div>
     </div>
 
-    <div id="rss" class="tab-content">
+    <div id="rss" class="tab-content<?php echo $active_tab === 'rss' ? ' active' : ''; ?>">
         <h2>Editar `rss.xml`</h2>
         <form class="item" method="post">
             <input type="hidden" name="active_tab" value="rss">
@@ -1985,20 +2134,13 @@ if (!empty($telegram_bots)) {
                     </div>
                     <div class="form-group"><label>URL:</label><input type="text" name="rss_url[]" value="<?php echo htmlspecialchars((string)$item->link); ?>"></div>
                     <div class="form-group"><label>Descripción:</label><textarea name="rss_description[]"><?php echo htmlspecialchars((string)$item->description); ?></textarea></div>
-                    <div class="form-group" style="text-align:right; margin-top:.5rem;">
-                        <button type="submit" name="save_rss_item" value="<?php echo $__i; ?>" class="button" style="background-color:#343a40;">Guardar edición</button>
+                    <div class="item-actions" style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+                        <input type="hidden" name="rss_item_lang[<?php echo $__i; ?>]" value="es">
+                        <input type="hidden" name="rss_item_tab[<?php echo $__i; ?>]" value="rss">
+                        <button type="submit" name="delete_rss_item" value="<?php echo $__i; ?>" class="button reject" style="padding:.3rem .6rem;" onclick="return confirm('¿Borrar esta entrada de rss.xml?');">Borrar</button>
+                        <button type="submit" name="save_rss_item" value="<?php echo $__i; ?>" class="button approve" style="padding:.3rem .6rem;">Guardar</button>
+                        <button type="submit" name="telegram_send_item" value="<?php echo $__i; ?>" class="button" style="padding:.3rem .6rem;">Enviar a Telegram</button>
                     </div>
-                    <?php
-                        $auto = strtolower((string)($env_vars['TELEGRAM_AUTO_SEND_ES'] ?? '1'));
-                        $auto_enabled = !in_array($auto, ['0','false','off','no'], true);
-                        $has_es_bot = !empty($telegram_bots['es']) && (!is_array($telegram_bots['es']) || (!empty($telegram_bots['es']['token']) && !empty($telegram_bots['es']['chat_id'])));
-                        if ($has_es_bot && !$auto_enabled): ?>
-                            <div style="margin-top:.5rem;">
-                                <input type="hidden" name="from_tab" value="rss">
-                                <input type="hidden" name="lang" value="es">
-                                <button type="submit" name="telegram_send_item" value="<?php echo $__i; ?>" class="button" style="padding:.3rem .6rem;">Enviar a Telegram</button>
-                            </div>
-                    <?php endif; ?>
                 </div>
             <?php $__i++; endforeach; else: ?><p>No se pudo cargar el fichero rss.xml o está vacío.</p><?php endif; ?>
             <div class="button-group">
@@ -2009,8 +2151,8 @@ if (!empty($telegram_bots)) {
         </form>
     </div>
 
-    <div id="traduccion" class="tab-content">
-        <h2>Traducción: rss_<?php echo htmlspecialchars($target_lang); ?>.xml</h2>
+    <div id="traduccion" class="tab-content<?php echo $active_tab === 'traduccion' ? ' active' : ''; ?>">
+        <h2>Traducción: <?php echo htmlspecialchars($target_feed_filename); ?></h2>
         <form class="item" method="post" style="margin-bottom:1rem;">
             <input type="hidden" name="active_tab" value="traduccion">
             <div class="form-group">
@@ -2026,14 +2168,18 @@ if (!empty($telegram_bots)) {
                     }
                     ?>
                 </select>
-                <small>Idioma al que traducir ahora. La traducción se guardará en rss_<?php echo htmlspecialchars($target_lang); ?>.xml</small>
+                <small>Idioma al que traducir ahora. La traducción se guardará en <?php echo htmlspecialchars($target_feed_filename); ?></small>
             </div>
             <button type="submit" name="set_translator_lang" class="button">Guardar idioma de traducción</button>
         </form>
         <form class="item" method="post" style="margin-bottom:1rem;">
             <input type="hidden" name="active_tab" value="traduccion">
-            <p>Genera ahora mismo la traducción de rss.xml a rss_<?php echo htmlspecialchars($target_lang); ?>.xml con Google Translate (una sola ejecución).</p>
-            <button type="submit" name="run_translator_now" class="button">Forzar traducción ahora</button>
+            <p>Genera ahora mismo la traducción de rss.xml a <?php echo htmlspecialchars($target_feed_filename); ?> con Google Translate (una sola ejecución).</p>
+            <label style="display:flex; align-items:center; gap:.4rem; margin-bottom:.6rem;">
+                <input type="checkbox" name="force_translate" value="1">
+                Ignorar caché y traducir de nuevo todos los elementos
+            </label>
+            <button type="submit" name="run_translator_now" class="button">Traducir ahora</button>
         </form>
         <form class="item" method="post">
             <input type="hidden" name="active_tab" value="traduccion">
@@ -2050,13 +2196,12 @@ if (!empty($telegram_bots)) {
                     </div>
                     <div class="form-group"><label>URL:</label><input type="text" name="rss_en_url[]" value="<?php echo htmlspecialchars((string)$item->link); ?>"></div>
                     <div class="form-group"><label>Descripción (<?php echo htmlspecialchars($translated_lang_name); ?>):</label><textarea name="rss_en_description[]" rows="4"><?php echo htmlspecialchars((string)$item->description); ?></textarea></div>
-                    <div class="form-group" style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
-                        <button type="submit" name="save_rss_en_item" value="<?php echo $__j; ?>" class="button" style="background-color:#343a40;">Guardar edición</button>
-                        <?php $tg_lang_key = strtolower($target_lang); if (!empty($telegram_bots[$tg_lang_key]) && (!is_array($telegram_bots[$tg_lang_key]) || (!empty($telegram_bots[$tg_lang_key]['token']) && !empty($telegram_bots[$tg_lang_key]['chat_id'])))): ?>
-                            <input type="hidden" name="from_tab" value="traduccion">
-                            <input type="hidden" name="lang" value="<?php echo htmlspecialchars($tg_lang_key); ?>">
-                            <button type="submit" name="telegram_send_item" value="<?php echo $__j; ?>" class="button" style="padding:.3rem .6rem;">Enviar a Telegram</button>
-                        <?php endif; ?>
+                    <div class="item-actions" style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+                        <input type="hidden" name="rss_en_item_lang[<?php echo $__j; ?>]" value="<?php echo htmlspecialchars($target_lang); ?>">
+                        <input type="hidden" name="rss_en_item_tab[<?php echo $__j; ?>]" value="traduccion">
+                        <button type="submit" name="delete_rss_en_item" value="<?php echo $__j; ?>" class="button reject" style="padding:.3rem .6rem;" onclick="return confirm('¿Borrar esta entrada de <?php echo htmlspecialchars($target_feed_filename); ?>?');">Borrar</button>
+                        <button type="submit" name="save_rss_en_item" value="<?php echo $__j; ?>" class="button approve" style="padding:.3rem .6rem;">Guardar</button>
+                        <button type="submit" name="telegram_send_item" value="<?php echo $__j; ?>" class="button" style="padding:.3rem .6rem;">Enviar a Telegram</button>
                     </div>
                 </div>
             <?php $__j++; endforeach; else: ?><p>No se pudo cargar el fichero rss_en.xml o está vacío.</p><?php endif; ?>
@@ -2068,8 +2213,8 @@ if (!empty($telegram_bots)) {
         </form>
     </div>
 
-    <?php $has_telegram = !empty($telegram_bots); if (!empty($has_telegram)): ?>
-    <div id="telegram" class="tab-content">
+    <?php if ($has_telegram): ?>
+    <div id="telegram" class="tab-content<?php echo $active_tab === 'telegram' ? ' active' : ''; ?>">
         <h2>Telegram</h2>
         <?php if (!empty($telegram_langs_data)): foreach ($telegram_langs_data as $tg): ?>
             <div class="item">
@@ -2102,7 +2247,7 @@ if (!empty($telegram_bots)) {
     </div>
     <?php endif; ?>
 
-    <div id="config" class="tab-content">
+    <div id="config" class="tab-content<?php echo $active_tab === 'config' ? ' active' : ''; ?>">
         <h2>Configuración</h2>
         <div class="item" style="margin-bottom:1rem;">
             <h3 style="margin-top:0;">Estado del traductor</h3>
@@ -2110,7 +2255,7 @@ if (!empty($telegram_bots)) {
                 <?php
                     function fmt_mtime($p) { return file_exists($p) ? date('Y-m-d H:i:s', filemtime($p)) : '—'; }
                     echo 'rss.xml: <strong>' . htmlspecialchars(fmt_mtime($rss_file)) . "</strong><br>";
-                    echo 'rss_' . htmlspecialchars($target_lang) . '.xml: <strong>' . htmlspecialchars(fmt_mtime($rss_en_file)) . "</strong><br>";
+                    echo htmlspecialchars($target_feed_filename) . ': <strong>' . htmlspecialchars(fmt_mtime($rss_en_file)) . "</strong><br>";
                     echo 'translation_cache.json: <strong>' . htmlspecialchars(fmt_mtime($translation_cache)) . "</strong><br>";
                     echo 'rss_change_cache.json: <strong>' . htmlspecialchars(fmt_mtime($rss_change_cache)) . "</strong>";
                 ?>
@@ -2120,11 +2265,11 @@ if (!empty($telegram_bots)) {
             <input type="hidden" name="active_tab" value="config">
             <div class="form-group">
                 <label>Gemini API Key</label>
-                <input type="text" name="gemini_api_key" value="<?php echo htmlspecialchars($env_vars['GEMINI_API_KEY'] ?? ''); ?>" placeholder="GEMINI_API_KEY">
+                <input type="text" name="gemini_api_key" value="<?php echo htmlspecialchars(telex_config_get($config, ['apis','gemini','api_key'], '')); ?>" placeholder="GEMINI_API_KEY">
             </div>
             <div class="form-group">
                 <label>Gemini Model</label>
-                <input type="text" id="gemini_model" name="gemini_model" value="<?php echo htmlspecialchars($env_vars['GEMINI_MODEL'] ?? 'gemini-1.5-flash-latest'); ?>" placeholder="gemini-1.5-flash-latest">
+                <input type="text" id="gemini_model" name="gemini_model" value="<?php echo htmlspecialchars(telex_config_get($config, ['apis','gemini','model'], 'gemini-1.5-flash-latest')); ?>" placeholder="gemini-1.5-flash-latest">
                 <div style="margin-top: .5rem;">
                     <small>Modelos sugeridos:</small>
                     <select onchange="document.getElementById('gemini_model').value=this.value" style="margin-left:.5rem;">
@@ -2138,32 +2283,21 @@ if (!empty($telegram_bots)) {
             </div>
             <div class="form-group">
                 <label>Google Translate API Key</label>
-                <input type="text" name="google_translate_api_key" value="<?php echo htmlspecialchars($env_vars['GOOGLE_TRANSLATE_API_KEY'] ?? ''); ?>" placeholder="GOOGLE_TRANSLATE_API_KEY">
+                <input type="text" name="google_translate_api_key" value="<?php echo htmlspecialchars(telex_config_get($config, ['apis','google_translate','api_key'], '')); ?>" placeholder="GOOGLE_TRANSLATE_API_KEY">
             </div>
 
             <div class="form-group">
                 <label>Telegram (ES): enviar automáticamente al aprobar</label>
-                <?php $auto_es = strtolower((string)($env_vars['TELEGRAM_AUTO_SEND_ES'] ?? '1')); $checked = !in_array($auto_es, ['0','false','off','no'], true) ? 'checked' : ''; ?>
+                <?php $auto_es = telex_flag_enabled(telex_config_get($config, ['telegram','auto_send','es'], true)); ?>
                 <label style="font-weight:400; display:inline-flex; align-items:center; gap:.4rem; margin-left:.5rem;">
-                    <input type="checkbox" name="telegram_auto_send_es" value="1" <?php echo $checked; ?>> Sí
+                    <input type="checkbox" name="telegram_auto_send_es" value="1" <?php echo $auto_es ? 'checked' : ''; ?>> Sí
                 </label>
                 <small>Si hay un bot y Chat ID configurados para español, enviará al canal al aprobar.</small>
             </div>
-            
             <div class="form-group">
-                <label>Ruta binario PM2 (opcional)</label>
-                <input type="text" name="pm2_bin" value="<?php echo htmlspecialchars($env_vars['PM2_BIN'] ?? ''); ?>" placeholder="/usr/bin/pm2 o pm2">
-                <small>Si el servidor web no tiene el PATH de pm2, indícalo aquí.</small>
-                <?php if (empty($env_vars['PM2_BIN'] ?? '') && !empty($pm2_detected)): ?>
-                    <div style="margin-top:.4rem;">
-                        <small>Sugerido: <code><?php echo htmlspecialchars($pm2_detected); ?></code></small>
-                        <button type="button" class="button" style="padding:.3rem .6rem; margin-left:.5rem;"
-                                data-suggest="<?php echo htmlspecialchars($pm2_detected, ENT_QUOTES); ?>"
-                                onclick="document.querySelector('input[name=pm2_bin]').value=this.dataset.suggest">
-                            Usar sugerido
-                        </button>
-                    </div>
-                <?php endif; ?>
+                <label>Intervalo sugerido del traductor (ms)</label>
+                <input type="number" name="translator_interval_ms" min="1000" step="500" value="<?php echo htmlspecialchars((string)telex_config_get($config, ['translator','interval_ms'], 60000)); ?>">
+                <small>Úsalo si programas una tarea externa para traducciones periódicas.</small>
             </div>
             <button type="submit" name="save_config" class="button approve">Guardar Configuración</button>
         </form>
@@ -2273,16 +2407,6 @@ if (!empty($telegram_bots)) {
         </form>
         <form class="item" method="post" style="margin-top:1rem;">
             <input type="hidden" name="active_tab" value="config">
-            <p>Si cambiaste modelo o llaves, reinicia los procesos Node para aplicar cambios.</p>
-            <button type="submit" name="restart_pm2" class="button">Reiniciar PM2 (rss-translator)</button>
-        </form>
-        <form class="item" method="post" style="margin-top:1rem;">
-            <input type="hidden" name="active_tab" value="config">
-            <p>Regenerar el fichero privado de entorno de PM2 y reiniciar el traductor.</p>
-            <button type="submit" name="regen_pm2_env_restart" class="button approve">Regenerar data/pm2_env.json y reiniciar PM2</button>
-        </form>
-        <form class="item" method="post" style="margin-top:1rem;">
-            <input type="hidden" name="active_tab" value="config">
             <h3 style="margin-top:0;">Cambiar contraseña</h3>
             <div class="form-group"><label>Contraseña actual</label><input type="password" name="current_password" required></div>
             <div class="form-group"><label>Nueva contraseña</label><input type="password" name="new_password" required></div>
@@ -2291,7 +2415,7 @@ if (!empty($telegram_bots)) {
         </form>
     </div>
 
-    <div id="prompt" class="tab-content">
+    <div id="prompt" class="tab-content<?php echo $active_tab === 'prompt' ? ' active' : ''; ?>">
         <h2>Editar Prompt de Gemini</h2>
         <form class="item" method="post">
             <input type="hidden" name="active_tab" value="prompt">
@@ -2303,7 +2427,7 @@ if (!empty($telegram_bots)) {
         </form>
     </div>
 
-    <div id="sources" class="tab-content">
+    <div id="sources" class="tab-content<?php echo $active_tab === 'sources' ? ' active' : ''; ?>">
         <h2>Gestionar Fuentes RSS</h2>
         <form class="item" method="post" id="sources-form">
             <input type="hidden" name="active_tab" value="sources">
@@ -2322,7 +2446,7 @@ if (!empty($telegram_bots)) {
         </form>
     </div>
     
-    <div id="gemini_log" class="tab-content">
+    <div id="gemini_log" class="tab-content<?php echo $active_tab === 'gemini_log' ? ' active' : ''; ?>">
         <h2>Log de Peticiones a Gemini</h2>
         <div class="item">
         <?php if (!empty($gemini_logs)): ?>
@@ -2358,43 +2482,94 @@ if (!empty($telegram_bots)) {
 
 <script>
     function openTab(evt, tabName) {
-        let i, tabcontent, tablinks;
-        document.querySelectorAll('input[name="active_tab"]').forEach(input => input.value = tabName);
-        
-        tabcontent = document.getElementsByClassName("tab-content");
-        for (i = 0; i < tabcontent.length; i++) { tabcontent[i].style.display = "none"; }
-        
-        tablinks = document.getElementsByClassName("tab-link");
-        for (i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(" active", ""); }
-        
-        document.getElementById(tabName).style.display = "block";
-        evt.currentTarget.className += " active";
+        if (evt && typeof evt.preventDefault === 'function') {
+            evt.preventDefault();
+        }
+
+        var target = document.getElementById(tabName);
+        if (!target) {
+            var fallbackSection = document.querySelector('.tab-content');
+            if (!fallbackSection) {
+                return;
+            }
+            tabName = fallbackSection.id;
+            target = fallbackSection;
+        }
+
+        var inputs = document.querySelectorAll('input[name="active_tab"]');
+        for (var i = 0; i < inputs.length; i++) {
+            inputs[i].value = tabName;
+        }
+
+        var sections = document.getElementsByClassName('tab-content');
+        for (var j = 0; j < sections.length; j++) {
+            sections[j].classList.toggle('active', sections[j].id === tabName);
+        }
+
+        var buttons = document.getElementsByClassName('tab-link');
+        for (var k = 0; k < buttons.length; k++) {
+            var btnTab = buttons[k].getAttribute('data-tab') || '';
+            if (btnTab === tabName) {
+                buttons[k].classList.add('active');
+            } else {
+                buttons[k].classList.remove('active');
+            }
+        }
+
+        try {
+            var url = new URL(window.location.href);
+            url.searchParams.set('tab', tabName);
+            window.history.replaceState({}, '', url);
+        } catch (e) {
+            // ignore URL update issues in older browsers
+        }
+
+        return false;
     }
 
-    document.getElementById('add-source-btn').addEventListener('click', function() {
-        const list = document.getElementById('sources-list');
-        const newItem = document.createElement('div');
-        newItem.className = 'form-group source-item';
-        newItem.innerHTML = `
-            <input type="text" name="source_name[]" placeholder="Nombre de la fuente">
-            <input type="text" name="source_url[]" placeholder="URL de la fuente">
-            <button type="button" onclick="this.parentElement.remove()" class="button reject" style="padding: 0.6rem 0.8rem;">X</button>
-        `;
-        list.appendChild(newItem);
-    });
-
-    document.addEventListener("DOMContentLoaded", function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const activeTab = urlParams.get('tab') || 'gemini';
-        
-        const tabButtons = document.querySelectorAll('.tab-link');
-        let tabToActivate = document.querySelector('.tab-link');
-        tabButtons.forEach(button => {
-            if (button.getAttribute('onclick').includes("'" + activeTab + "'")) {
-                tabToActivate = button;
+    var addSourceBtn = document.getElementById('add-source-btn');
+    if (addSourceBtn) {
+        addSourceBtn.addEventListener('click', function () {
+            var list = document.getElementById('sources-list');
+            if (!list) {
+                return;
             }
+            var newItem = document.createElement('div');
+            newItem.className = 'form-group source-item';
+            newItem.innerHTML = `
+                <input type="text" name="source_name[]" placeholder="Nombre de la fuente">
+                <input type="text" name="source_url[]" placeholder="URL de la fuente">
+                <button type="button" onclick="this.parentElement.remove()" class="button reject" style="padding: 0.6rem 0.8rem;">X</button>
+            `;
+            list.appendChild(newItem);
         });
-        tabToActivate.click();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var urlParams = new URLSearchParams(window.location.search);
+        var activeTab = urlParams.get('tab') || <?php echo json_encode($active_tab); ?>;
+        if (!document.getElementById(activeTab)) {
+            var firstSection = document.querySelector('.tab-content');
+            if (firstSection) {
+                activeTab = firstSection.id;
+            }
+        }
+
+        var buttons = document.getElementsByClassName('tab-link');
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].addEventListener('click', function (e) {
+                var tab = this.getAttribute('data-tab');
+                if (!tab) {
+                    return;
+                }
+                if (e && typeof e.preventDefault === 'function') {
+                    e.preventDefault();
+                }
+                openTab(e, tab);
+            });
+        }
+
+        openTab(null, activeTab);
     });
 </script>
 

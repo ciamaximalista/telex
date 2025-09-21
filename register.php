@@ -4,24 +4,9 @@ session_start();
 
 $data_dir = __DIR__ . '/data';
 if (!is_dir($data_dir)) { @mkdir($data_dir, 0775, true); }
-$pm2_env_file = $data_dir . '/pm2_env.json';
-if (!file_exists($pm2_env_file)) {
-    $defaults = [
-        'GEMINI_API_KEY' => '',
-        'GEMINI_MODEL' => 'gemini-1.5-flash-latest',
-        'GOOGLE_TRANSLATE_API_KEY' => '',
-        'TRANSLATOR_TARGET_LANG' => 'en',
-        'TRANSLATOR_INTERVAL_MS' => '60000',
-        'TELEGRAM_AUTO_SEND_ES' => '1',
-        'PM2_BIN' => '',
-        'INPUT_RSS' => __DIR__ . '/rss.xml',
-        'OUTPUT_RSS' => __DIR__ . '/rss_en.xml'
-    ];
-    $encoded = json_encode($defaults, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($encoded !== false) {
-        @file_put_contents($pm2_env_file, $encoded . "\n");
-    }
-}
+
+require_once __DIR__ . '/includes/config.php';
+telex_load_config(); // asegura la creación del nuevo config.json (y migra si es necesario)
 $credentials_file = $data_dir . '/auth.json';
 
 // Si ya existe un usuario, ir a login

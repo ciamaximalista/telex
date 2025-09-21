@@ -1,6 +1,6 @@
 # Telex
 
-- Telex es una app web ligera (PHP + Node.js) para:
+- Telex es una app web ligera en PHP para:
   - Leer un grupo masivo de fuentes RSS y generar sugerencias de selección con Gemini (pestaña “Telex”).
   - Aprobar/editar y publicar un feed `rss.xml` en español.
   - Traducir automáticamente ese feed a `rss_<idioma>.xml` (por defecto `rss_en.xml`).
@@ -18,27 +18,25 @@ Características
   - Prompt: editar el prompt con variables `{{title}} {{description}} {{link}} {{examples}}`.
   - Fuentes: añadir/ordenar/eliminar feeds de entrada.
   - Log: visor del log JSONL de llamadas a Gemini.
-  - Configuración: claves (`GEMINI_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`), modelo (`GEMINI_MODEL`), `PM2_BIN`, pruebas/diagnóstico y reinicio del traductor (PM2). Incluye:
+  - Configuración: claves (`GEMINI_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`), modelo (`GEMINI_MODEL`), pruebas/diagnóstico y ajustes del traductor. Incluye:
     - Bots de Telegram por idioma (token + Chat ID `@canal` o ID numérico) con listado y eliminación.
     - Opción “Telegram (ES): enviar automáticamente al aprobar” (activada por defecto).
     - Personalizaciones: cambiar nombre de archivo por idioma activo, y el `title`/`description` del canal RSS.
-- Generación/edición de `rss.xml` y traducción a `rss_<idioma>.xml` (programado con PM2 o bajo demanda).
+- Generación/edición de `rss.xml` y traducción a `rss_<idioma>.xml` (bajo demanda) con caché de traducción.
 - Ficheros de datos planos en `data/` creados automáticamente si faltan.
 
 Arquitectura
 
-- PHP: `telex.php` (UI y lógica de guardado en `data/`).
-- Node.js:
-  - `worker.js`: lee fuentes y genera sugerencias con Gemini (ejecución bajo demanda).
-  - `rss_translator.js`: traduce `rss.xml` → `rss_<idioma>.xml` de forma periódica (PM2) o una sola vez.
-- PM2 opcional para mantener el traductor corriendo (`ecosystem.config.cjs`).
+- PHP puro:
+  - `telex.php`: UI principal y orquestación de acciones (sugerencias, feeds, traducción, Telegram).
+  - `includes/config.php`: carga/guardado de `data/config.json`, migración desde el antiguo `pm2_env.json` y utilidades de acceso a configuración.
+  - `includes/services.php`: helpers para Gemini, agregación de feeds, generación de sugerencias, traducción con Google Translate y utilidades de persistencia.
+- Datos en `data/` (JSON y logs) gestionados con escrituras atómicas.
 
 Requisitos
 
 - PHP 7.4+ con: `mbstring`, `intl` (Normalizer), `dom`, `simplexml`, `curl`.
 - Servidor web (Apache/Nginx) con PHP.
-- Node.js 18+ y npm.
-- PM2 (opcional pero recomendado) para el traductor.
 
 Instalación
 
@@ -49,22 +47,16 @@ git clone https://github.com/ciamaximalista/telex.git
 cd telex
 ```
 
-2) Instalar dependencias de Node
-
-```
-npm install
-```
-
-3) Configurar el servidor web
+2) Configurar el servidor web
 
 - Sirve el proyecto apuntando a la carpeta donde están `index.html` y `telex.php`.
 - Verifica que PHP tiene permisos de escritura sobre:
   - Directorio `data/` (y `img/` si subes imágenes).
   - Ficheros `rss.xml` y `rss_<idioma>.xml` (p. ej., `rss_en.xml`).
-  - Archivo `data/pm2_env.json` (la pestaña Configuración lo crea/modifica).
+  - Archivo `data/config.json` (la pestaña Configuración lo crea o migra automáticamente).
 - La app utiliza `umask(0002)` para facilitar la colaboración por grupo.
 
-4) Permisos y propiedad (Debian/Ubuntu)
+3) Permisos y propiedad (Debian/Ubuntu)
 
 Recomendado si el servidor web usa `www-data`:
 
@@ -80,36 +72,25 @@ sudo find . -type d -exec chmod g+s {} \;
 sudo chown www-data:www-data rss.xml rss_en.xml  # ajusta según el idioma objetivo
 ```
 
-5) Primer acceso y credenciales
+4) Primer acceso y credenciales
 
 - Abre `telex.php`. Si no hay credenciales, se mostrará `register.php` para crear el usuario inicial.
 - Podrás cambiar la contraseña desde la pestaña Configuración más adelante.
 
-6) Configuración (`data/pm2_env.json`)
+5) Configuración (`data/config.json`)
 
-Entra en “Configuración” y completa (se guardará en `data/pm2_env.json`):
+Entra en “Configuración” y completa (se guardará en `data/config.json`):
 
 - `GEMINI_API_KEY`: clave de Google AI Studio (Gemini).
-- `GEMINI_MODEL`: por ejemplo `gemini-1.5-flash-latest` o `gemini-1.5-pro-latest`.
+- `GEMINI_MODEL`: por ejemplo `gemini-1.5-flash-latest`.
 - `GOOGLE_TRANSLATE_API_KEY`: clave de Cloud Translation.
-- `PM2_BIN` (opcional): ruta absoluta a pm2 (p. ej., `/usr/bin/pm2`).
+- Opcional: activa/desactiva el envío automático a Telegram (ES) y ajusta el intervalo sugerido del traductor.
 
-Desde esa pestaña puedes probar ambas integraciones y reiniciar el traductor (PM2).
-
-7) PM2 (traductor en segundo plano)
-
-- El archivo `ecosystem.config.cjs` ya no contiene secretos. En su lugar, apunta a `data/pm2_env.json` (no accesible vía web) y el traductor los leerá automáticamente.
-- Se genera/actualiza `data/pm2_env.json` al guardar Configuración o cambiar el idioma en la pestaña Traducción.
-- Inicia el proceso del traductor y guarda la configuración:
-
-```
-pm2 start ecosystem.config.cjs --only rss-translator
-pm2 save
-```
+Desde esa pestaña puedes probar ambas integraciones.
 
 Uso básico
 
-- Telex → “Recibir Telex”: ejecuta `worker.js` y carga sugerencias.
+- Telex → “Recibir Telex”: ejecuta el generador de sugerencias (Gemini) y carga resultados.
 - Revisa, edita y “Aprobar” para añadir a `rss.xml`. También puedes “Añadir entrada de otras fuentes” manualmente.
 - Al aprobar una entrada, el título del ítem en la feed se deriva automáticamente del resumen final: se toma el texto hasta el primer punto (`.`), cierre de exclamación (`!`) o cierre de interrogación (`?`). Si no se encuentra ninguno, se recorta a ~140 caracteres.
 - RSS/Traducción: edita, mueve ↑/↓, elimina seleccionados o todos, y guarda.
@@ -141,14 +122,12 @@ Cambio de idioma de la segunda feed
 
 - Por defecto se traduce al inglés (`rss_en.xml`).
 - Desde “Traducción” puedes seleccionar otro idioma. El archivo objetivo será `rss_<idioma>.xml` (no sobrescribe otros idiomas previos).
-- Si usas PM2, tras cambiar el idioma pulsa “Reiniciar PM2 (rss-translator)” en Configuración.
 
 Estructura de ficheros
 
-- `telex.php`: interfaz principal (pestañas, guardado, pruebas, reinicio PM2).
-- `worker.js`: lectura de fuentes y generación de sugerencias con Gemini.
-- `rss_translator.js`: traduce `rss.xml` → `rss_<idioma>.xml`; soporta `RUN_ONCE=1` para ejecución inmediata desde la UI.
-- `ecosystem.config.cjs`: procesos PM2 (solo `rss-translator`).
+- `telex.php`: interfaz principal (pestañas, guardado, pruebas y acciones de traducción/sugerencias).
+- `includes/config.php`: gestión de `data/config.json` y migraciones desde `pm2_env.json`.
+- `includes/services.php`: helpers para Gemini, feeds, traducción y persistencia.
 - `data/`: estado de la app (autogenerado):
   - `sugerencias_pendientes.json`, `examples.json`, `published_messages.json`
   - `.sent_titles_cache.json`, `.sent_titlekeys_cache.json`
@@ -160,28 +139,24 @@ Estructura de ficheros
 
 Solución de problemas
 
-- PM2 no reinicia desde la web: define `PM2_BIN` en Configuración (ej. `/usr/bin/pm2`).
-- Node no se encuentra: ajusta `$node_path` en `telex.php` (por defecto `/usr/bin/node`).
-- `rss_<idioma>.xml` no cambia: revisa “Probar Translate”, usa “Forzar traducción ahora” y verifica permisos.
+- `rss_<idioma>.xml` no cambia: revisa “Probar Translate”, usa “Traducir ahora” (con la opción *Ignorar caché* si procede) y verifica permisos.
 - Gemini falla: usa “Probar Gemini” y verifica clave/modelo.
-- Permisos: el usuario del servidor web debe poder escribir `data/`, `img/`, `data/pm2_env.json`, `rss.xml` y `rss_<idioma>.xml`.
+- Permisos: el usuario del servidor web debe poder escribir `data/`, `img/`, `data/config.json`, `rss.xml` y `rss_<idioma>.xml`.
 
 Seguridad de secretos
 
-- `data/` incluye un `.htaccess` con `Require all denied` para impedir el acceso directo a ficheros sensibles (como `pm2_env.json`).
+- `data/` incluye un `.htaccess` con `Require all denied` para impedir el acceso directo a ficheros sensibles (como `config.json`).
 
 Actualizaciones
 
 ```
 git pull
-npm install
-pm2 restart rss-translator
 ```
 
 Seguridad
 
 - Login básico (usuario/contraseña); considera restringir por IP o VPN.
-- No publiques `data/pm2_env.json` con claves reales en repositorios públicos.
+- No publiques `data/config.json` con claves reales en repositorios públicos.
 
 Licencia
 
