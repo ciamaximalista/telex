@@ -250,6 +250,39 @@ if (!function_exists('escape_md')) {
     }
 }
 
+if (!function_exists('normalize_url_compare')) {
+    function normalize_url_compare($url) {
+        $url = trim((string)$url);
+        if ($url === '') return '';
+        $parts = @parse_url($url);
+        if (!$parts || empty($parts['host'])) {
+            return rtrim($url, "/");
+        }
+        $scheme = strtolower($parts['scheme'] ?? 'http');
+        $host = strtolower($parts['host']);
+        $path = $parts['path'] ?? '';
+        $path = preg_replace('#/{2,}#', '/', $path);
+        $path = rtrim($path, '/');
+        $query = isset($parts['query']) ? ('?' . $parts['query']) : '';
+        $fragment = isset($parts['fragment']) ? ('#' . $parts['fragment']) : '';
+        return $scheme . '://' . $host . $path . $query . $fragment;
+    }
+}
+
+if (!function_exists('extract_url_from_text')) {
+    function extract_url_from_text($text) {
+        if (!is_string($text) || $text === '') {
+            return '';
+        }
+        $decoded = html_entity_decode($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        if (preg_match_all('~https?://[^\s<>"\']+~u', $decoded, $matches) && !empty($matches[0])) {
+            $url = end($matches[0]);
+            return rtrim(trim($url), " .,;:–—-…\"'\])}>");
+        }
+        return '';
+    }
+}
+
 if (!function_exists('normalize_plain_text')) {
     function normalize_plain_text($text) {
         $decoded = html_entity_decode((string)$text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -259,7 +292,7 @@ if (!function_exists('normalize_plain_text')) {
 }
 
 if (!function_exists('sanitize_feed_html')) {
-    function sanitize_feed_html($title, $html) {
+    function sanitize_feed_html($title, $html, $link = '') {
         $out = trim((string)$html);
         if ($out === '') {
             return '';
@@ -268,8 +301,11 @@ if (!function_exists('sanitize_feed_html')) {
         $normTitle = normalize_plain_text($title);
 
         $fallback = function ($html) {
-            return trim(preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', (string)$html));
+            $html = preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', (string)$html);
+            return rtrim(trim($html), ' .,:;–—-');
         };
+
+        $targetLink = normalize_url_compare($link);
 
         libxml_use_internal_errors(true);
         $doc = new DOMDocument('1.0', 'UTF-8');
@@ -402,6 +438,17 @@ if (!function_exists('sanitize_feed_html')) {
             break;
         }
 
+        if ($targetLink !== '') {
+            $xpath = new DOMXPath($doc);
+            foreach ($xpath->query('.//a[@href]', $container) as $anchor) {
+                /** @var DOMElement $anchor */
+                $href = normalize_url_compare($anchor->getAttribute('href'));
+                if ($href === $targetLink) {
+                    $removeNode($anchor);
+                }
+            }
+        }
+
         // Eliminar <br> o texto vacío restante al inicio
         while ($container->firstChild) {
             $child = $container->firstChild;
@@ -421,7 +468,26 @@ if (!function_exists('sanitize_feed_html')) {
             $result .= $doc->saveHTML($node);
         }
 
-        return $fallback($result);
+        $cleaned = $fallback($result);
+
+        if ($targetLink !== '') {
+            $cleaned = preg_replace_callback('~<a[^>]+href="([^"]+)"[^>]*>.*?</a>~i', function ($matches) use ($targetLink) {
+                return normalize_url_compare($matches[1]) === $targetLink ? '' : $matches[0];
+            }, $cleaned);
+
+            $linkVariants = array_unique(array_filter([
+                $targetLink,
+                htmlspecialchars($targetLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                htmlentities($targetLink, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            ]));
+            foreach ($linkVariants as $variant) {
+                if ($variant === '') continue;
+                $pattern = '~\s*' . preg_quote($variant, '~') . '\s*~u';
+                $cleaned = preg_replace($pattern, ' ', $cleaned);
+            }
+        }
+
+        return trim(preg_replace('~\s{2,}~u', ' ', $cleaned));
     }
 }
 
@@ -442,6 +508,10 @@ if (!function_exists('tg_send')) {
         if ($u !== '' && $d !== '' && mb_stripos($d, $u) !== false) {
             $u = '';
         }
+
+        $d = ltrim($d, "\r\n");
+        $d = preg_replace('~^[\s\.\,:;–—-]+~u', '', $d);
+        $d = ltrim($d);
 
         $title_md = $t !== '' ? ('*' . escape_md($t) . '*') : '';
         $desc_md  = $d !== '' ? escape_md($d) : '';
@@ -597,19 +667,50 @@ if (isset($_POST['action'])) {
 
     if ($suggestion_index !== false) {
         $suggestion = $sugerencias[$suggestion_index];
-        $finalMessage = ''; $decision = '';
+        $finalMessage = '';
+        $rawSummary = '';
+        $decision = '';
         switch ($_POST['action']) {
-            case 'approve': $finalMessage = $suggestion['summary']; $decision = 'enviada';   break;
-            case 'edit':    $finalMessage = $_POST['summary'];       $decision = 'editada';  break;
+            case 'approve': $rawSummary = $suggestion['summary']; $decision = 'enviada';   break;
+            case 'edit':    $rawSummary = $_POST['summary'];       $decision = 'editada';  break;
             case 'reject':                                           $decision = 'descartada';   break;
+        }
+        $editedTitle = trim($_POST['edited_title'] ?? '');
+        $finalMessage = $rawSummary;
+        $posted_link = trim($_POST['link'] ?? '');
+        $original_link = $suggestion['link'] ?? '';
+        $auto_link = extract_url_from_text($rawSummary);
+
+        $finalLink = $posted_link;
+        if ($finalLink === '' && $auto_link !== '') {
+            $finalLink = $auto_link;
+        }
+        if ($finalLink === '') {
+            $finalLink = $original_link;
+        }
+
+        if ($auto_link !== '' && normalize_url_compare($posted_link) === normalize_url_compare($original_link)
+            && normalize_url_compare($auto_link) !== normalize_url_compare($original_link)) {
+            $finalLink = $auto_link;
         }
         // Añadir entrada al RSS (sin Telegram)
         if (!empty($finalMessage)) {
-            $cleanFinal = sanitize_feed_html($suggestion['title'] ?? '', $finalMessage);
+            $titleForSanitize = $editedTitle !== '' ? $editedTitle : ($suggestion['title'] ?? '');
+            $cleanFinal = sanitize_feed_html($titleForSanitize, $finalMessage, $finalLink);
             if ($cleanFinal !== '') {
                 $finalMessage = $cleanFinal;
             } else {
                 $finalMessage = trim((string)$finalMessage);
+            }
+            $derivedTitle = rtrim(derive_title_from_summary($finalMessage), " .,:;–—-");
+            $fallbackTitle = rtrim($suggestion['title'] ?? '', " .,:;–—-");
+            if ($editedTitle !== '') {
+                $finalTitle = rtrim($editedTitle, " .,:;–—-");
+            } else {
+                $finalTitle = $derivedTitle !== '' ? $derivedTitle : $fallbackTitle;
+            }
+            if ($finalTitle === '') {
+                $finalTitle = $fallbackTitle;
             }
             // Cargar o crear rss.xml
             libxml_use_internal_errors(true);
@@ -633,12 +734,12 @@ if (isset($_POST['action'])) {
                 }
             }
 
-            $link = $suggestion['link'] ?? '';
+            $link = $finalLink;
             $guid = $link !== '' ? $link : ('telex:' . md5(($suggestion['title'] ?? '') . '|' . $finalMessage . '|' . microtime(true)));
             if (!isset($existingKeys[$guid])) {
                 $item = $rss->channel->addChild('item');
-                $derived = derive_title_from_summary($finalMessage);
-                $item->addChild('title', htmlspecialchars($derived !== '' ? $derived : ($suggestion['title'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                $itemTitle = $finalTitle !== '' ? $finalTitle : $fallbackTitle;
+                $item->addChild('title', htmlspecialchars($itemTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
                 if ($link) { $item->addChild('link', htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')); }
                 $item->addChild('guid', htmlspecialchars($guid, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
                 $descNode = $item->addChild('description');
@@ -690,13 +791,13 @@ if (isset($_POST['action'])) {
                 $dom->save($rss_file);
             }
 
-            $published[] = ['title' => $suggestion['title'], 'text' => $finalMessage, 'timestamp' => date('c')];
+            $published[] = ['title' => $finalTitle !== '' ? $finalTitle : ($suggestion['title'] ?? ''), 'text' => $finalMessage, 'timestamp' => date('c')];
         }
         $examples[] = [ 'title' => $suggestion['title'], 'link'  => $suggestion['link'], 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => !empty($finalMessage) ? $finalMessage : $suggestion['summary'] ];
         $sent_titles[] = $suggestion['title'];
         $sent_titlekeys[] = title_key($suggestion['title']);
-        if (!empty($_POST['edited_title'])) {
-            $sent_titlekeys[] = title_key($_POST['edited_title']);
+        if ($editedTitle !== '') {
+            $sent_titlekeys[] = title_key($editedTitle);
         }
         array_splice($sugerencias, $suggestion_index, 1);
         file_put_contents($sugerencias_file, json_encode($sugerencias, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -710,7 +811,47 @@ if (isset($_POST['action'])) {
 }
     if (isset($_POST['save_prompt'])) { file_put_contents($prompt_file, $_POST['prompt_text']); $message = "Prompt guardado con éxito."; $message_type = 'success'; }
     if (isset($_POST['save_sources'])) { $sources = []; if (isset($_POST['source_name'])) { for ($i = 0; $i < count($_POST['source_name']); $i++) { if (!empty($_POST['source_name'][$i]) && !empty($_POST['source_url'][$i])) { $sources[] = ['name' => $_POST['source_name'][$i], 'url' => $_POST['source_url'][$i]]; } } } file_put_contents($sources_file, json_encode($sources, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)); $message = "Fuentes guardadas con éxito."; $message_type = 'success'; }
-    if (isset($_POST['save_rss'])) { if (file_exists($rss_file) && is_writable($rss_file)) { libxml_use_internal_errors(true); $xml = simplexml_load_file($rss_file); if ($xml && isset($xml->channel->item)) { for ($i = 0; $i < count($xml->channel->item); $i++) { if (isset($_POST['rss_title'][$i])) { $xml->channel->item[$i]->title = $_POST['rss_title'][$i]; $xml->channel->item[$i]->description = $_POST['rss_description'][$i]; $xml->channel->item[$i]->link = $_POST['rss_url'][$i]; } } $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace = false; $dom->formatOutput = true; $dom->loadXML($xml->asXML()); $dom->save($rss_file); $message = "Fichero rss.xml guardado con éxito."; $message_type = 'success'; } else { $message = "Error: El fichero rss.xml está mal formado."; $message_type = 'error'; } } else { $message = "Error: No se encontró o no se puede escribir en rss.xml."; $message_type = 'error'; } }
+    if (isset($_POST['save_rss']) || isset($_POST['save_rss_item'])) {
+        $active_tab = 'rss';
+        if (file_exists($rss_file) && is_writable($rss_file)) {
+            libxml_use_internal_errors(true);
+            $xml = simplexml_load_file($rss_file);
+            if ($xml && isset($xml->channel->item)) {
+                $count = count($xml->channel->item);
+                $targetIdx = null;
+                if (isset($_POST['save_rss_item'])) {
+                    $idx = intval($_POST['save_rss_item']);
+                    if ($idx >= 0 && $idx < $count) {
+                        $targetIdx = $idx;
+                    }
+                }
+                for ($i = 0; $i < $count; $i++) {
+                    if ($targetIdx !== null && $i !== $targetIdx) {
+                        continue;
+                    }
+                    if (isset($_POST['rss_title'][$i])) {
+                        $postedTitle = $_POST['rss_title'][$i];
+                        $postedDesc  = $_POST['rss_description'][$i] ?? '';
+                        $postedLink  = $_POST['rss_url'][$i] ?? '';
+                        $xml->channel->item[$i]->title = rtrim($postedTitle, " .,:;–—-");
+                        $xml->channel->item[$i]->description = sanitize_feed_html($postedTitle, $postedDesc, $postedLink);
+                        $xml->channel->item[$i]->link = $postedLink;
+                    }
+                }
+                $dom = new DOMDocument('1.0');
+                $dom->preserveWhiteSpace = false;
+                $dom->formatOutput = true;
+                $dom->loadXML($xml->asXML());
+                $dom->save($rss_file);
+                $message = $targetIdx !== null ? 'Entrada actualizada en rss.xml.' : 'Fichero rss.xml guardado con éxito.';
+                $message_type = 'success';
+            } else {
+                $message = "Error: El fichero rss.xml está mal formado."; $message_type = 'error';
+            }
+        } else {
+            $message = "Error: No se encontró o no se puede escribir en rss.xml."; $message_type = 'error';
+        }
+    }
     // Eliminar seleccionados de RSS
     if (isset($_POST['delete_rss_selected'])) {
         $active_tab = 'rss';
@@ -801,7 +942,7 @@ if (isset($_POST['action'])) {
             }
         }
     }
-    if (isset($_POST['save_rss_en'])) {
+    if (isset($_POST['save_rss_en']) || isset($_POST['save_rss_en_item'])) {
         libxml_use_internal_errors(true);
         $xml = null;
         if (file_exists($rss_en_file)) {
@@ -817,11 +958,25 @@ if (isset($_POST['action'])) {
         }
         if ($xml && isset($xml->channel)) {
             if (isset($xml->channel->item)) {
-                for ($i = 0; $i < count($xml->channel->item); $i++) {
+                $count = count($xml->channel->item);
+                $targetIdx = null;
+                if (isset($_POST['save_rss_en_item'])) {
+                    $idx = intval($_POST['save_rss_en_item']);
+                    if ($idx >= 0 && $idx < $count) {
+                        $targetIdx = $idx;
+                    }
+                }
+                for ($i = 0; $i < $count; $i++) {
+                    if ($targetIdx !== null && $i !== $targetIdx) {
+                        continue;
+                    }
                     if (isset($_POST['rss_en_title'][$i])) {
-                        $xml->channel->item[$i]->title = $_POST['rss_en_title'][$i];
-                        $xml->channel->item[$i]->description = $_POST['rss_en_description'][$i];
-                        $xml->channel->item[$i]->link = $_POST['rss_en_url'][$i];
+                        $postedTitle = $_POST['rss_en_title'][$i];
+                        $postedDesc  = $_POST['rss_en_description'][$i] ?? '';
+                        $postedLink  = $_POST['rss_en_url'][$i] ?? '';
+                        $xml->channel->item[$i]->title = rtrim($postedTitle, " .,:;–—-");
+                        $xml->channel->item[$i]->description = sanitize_feed_html($postedTitle, $postedDesc, $postedLink);
+                        $xml->channel->item[$i]->link = $postedLink;
                     }
                 }
             }
@@ -830,7 +985,7 @@ if (isset($_POST['action'])) {
             $dom->formatOutput = true;
             $dom->loadXML($xml->asXML());
             if (safe_dom_save($dom, $rss_en_file)) {
-                $message = "Fichero rss_" . htmlspecialchars($target_lang) . ".xml guardado con éxito.";
+                $message = isset($_POST['save_rss_en_item']) ? 'Entrada actualizada en rss_' . htmlspecialchars($target_lang) . '.xml.' : "Fichero rss_" . htmlspecialchars($target_lang) . ".xml guardado con éxito.";
                 $message_type = 'success';
             } else {
                 $message = "No se pudo guardar rss_" . htmlspecialchars($target_lang) . ".xml.";
@@ -1058,7 +1213,7 @@ if (isset($_POST['action'])) {
         }
 
         if ($title !== '') {
-            $cleanDesc = sanitize_feed_html($title, $desc);
+            $cleanDesc = sanitize_feed_html($title, $desc, $link);
             if ($cleanDesc !== '') {
                 $desc = $cleanDesc;
             } else {
@@ -1547,6 +1702,13 @@ if (file_exists($rss_file)) {
     $rss_content = simplexml_load_file($rss_file);
     if ($rss_content && isset($rss_content->channel->item)) {
         foreach($rss_content->channel->item as $item) { $rss_items_actuales[] = $item; }
+        usort($rss_items_actuales, function($a, $b) {
+            $ta = strtotime((string)($a->pubDate ?? ''));
+            $tb = strtotime((string)($b->pubDate ?? ''));
+            if ($ta === false) $ta = 0;
+            if ($tb === false) $tb = 0;
+            return $tb <=> $ta;
+        });
     }
 }
 
@@ -1556,6 +1718,13 @@ if (file_exists($rss_en_file)) {
     $comm_content = simplexml_load_file($rss_en_file);
     if ($comm_content && isset($comm_content->channel->item)) {
         foreach ($comm_content->channel->item as $item) { $rss_en_items_actuales[] = $item; }
+        usort($rss_en_items_actuales, function($a, $b) {
+            $ta = strtotime((string)($a->pubDate ?? ''));
+            $tb = strtotime((string)($b->pubDate ?? ''));
+            if ($ta === false) $ta = 0;
+            if ($tb === false) $tb = 0;
+            return $tb <=> $ta;
+        });
     }
 }
 // Eliminado: lógica de envío a Communalia/Telegram
@@ -1699,9 +1868,9 @@ if (!empty($telegram_bots)) {
         .button:hover { opacity: 0.9; }
         .button.approve { background-color: var(--success-color); }
         .button.reject { background-color: var(--danger-color); }
-        .message { padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; text-align: center; font-weight: 500; }
-        .message.success { background-color: #d1e7dd; color: #0f5132; }
-        .message.error { background-color: #f8d7da; color: #842029; }
+        .message { padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; text-align: center; font-weight: 500; background-color: #000; color: #39ff14; font-family: 'Courier New', Courier, monospace; }
+        .message.success { color: #39ff14; }
+        .message.error { color: #ffef5a; }
         .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--gray); margin-bottom: 1.5rem; }
         .tab-link { padding: 0.75rem 1.5rem; cursor: pointer; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 1rem; }
         .tab-link.active { border-bottom-color: var(--primary-color); font-weight: 600; }
@@ -1759,16 +1928,21 @@ if (!empty($telegram_bots)) {
             <h2>Telex Pendientes</h2>
             <?php if (!empty($sugerencias_pendientes)): ?>
                 <?php foreach ($sugerencias_pendientes as $sug): ?>
+                    <?php
+                        $summary_link_auto = extract_url_from_text($sug['summary'] ?? '');
+                        $prefill_link = $summary_link_auto !== '' ? $summary_link_auto : ($sug['link'] ?? '');
+                    ?>
                     <div class="item">
                         <h3><?php echo htmlspecialchars($sug['title']); ?></h3>
                         <form method="post">
                             <input type="hidden" name="active_tab" value="gemini">
                             <input type="hidden" name="suggestion_id" value="<?php echo htmlspecialchars($sug['id']); ?>">
+                            <div class="form-group"><label>Título:</label><input type="text" name="edited_title" value="<?php echo htmlspecialchars($sug['title']); ?>" required></div>
+                            <div class="form-group"><label>URL:</label><input type="url" name="link" value="<?php echo htmlspecialchars($prefill_link); ?>" placeholder="https://..."></div>
                             <div class="form-group"><label>Resumen Sugerido:</label><textarea name="summary"><?php echo htmlspecialchars($sug['summary']); ?></textarea></div>
                             <div class="form-group"><p><strong>Enlace:</strong> <a href="<?php echo htmlspecialchars($sug['link']); ?>" target="_blank" rel="noopener noreferrer">Ver noticia original</a></p></div>
                             <div class="button-group">
-                                <button type="submit" name="action" value="approve" class="button approve">Aprobar</button>
-                                <button type="submit" name="action" value="edit" class="button">Guardar y Aprobar</button>
+                                <button type="submit" name="action" value="edit" class="button">Guardar y publicar</button>
                                 <button type="submit" name="action" value="reject" class="button reject">Rechazar</button>
                             </div>
                         </form>
@@ -1811,6 +1985,9 @@ if (!empty($telegram_bots)) {
                     </div>
                     <div class="form-group"><label>URL:</label><input type="text" name="rss_url[]" value="<?php echo htmlspecialchars((string)$item->link); ?>"></div>
                     <div class="form-group"><label>Descripción:</label><textarea name="rss_description[]"><?php echo htmlspecialchars((string)$item->description); ?></textarea></div>
+                    <div class="form-group" style="text-align:right; margin-top:.5rem;">
+                        <button type="submit" name="save_rss_item" value="<?php echo $__i; ?>" class="button" style="background-color:#343a40;">Guardar edición</button>
+                    </div>
                     <?php
                         $auto = strtolower((string)($env_vars['TELEGRAM_AUTO_SEND_ES'] ?? '1'));
                         $auto_enabled = !in_array($auto, ['0','false','off','no'], true);
@@ -1873,13 +2050,14 @@ if (!empty($telegram_bots)) {
                     </div>
                     <div class="form-group"><label>URL:</label><input type="text" name="rss_en_url[]" value="<?php echo htmlspecialchars((string)$item->link); ?>"></div>
                     <div class="form-group"><label>Descripción (<?php echo htmlspecialchars($translated_lang_name); ?>):</label><textarea name="rss_en_description[]" rows="4"><?php echo htmlspecialchars((string)$item->description); ?></textarea></div>
-                    <?php $tg_lang_key = strtolower($target_lang); if (!empty($telegram_bots[$tg_lang_key]) && (!is_array($telegram_bots[$tg_lang_key]) || (!empty($telegram_bots[$tg_lang_key]['token']) && !empty($telegram_bots[$tg_lang_key]['chat_id'])))): ?>
-                        <div style="margin-top:.5rem;">
+                    <div class="form-group" style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
+                        <button type="submit" name="save_rss_en_item" value="<?php echo $__j; ?>" class="button" style="background-color:#343a40;">Guardar edición</button>
+                        <?php $tg_lang_key = strtolower($target_lang); if (!empty($telegram_bots[$tg_lang_key]) && (!is_array($telegram_bots[$tg_lang_key]) || (!empty($telegram_bots[$tg_lang_key]['token']) && !empty($telegram_bots[$tg_lang_key]['chat_id'])))): ?>
                             <input type="hidden" name="from_tab" value="traduccion">
                             <input type="hidden" name="lang" value="<?php echo htmlspecialchars($tg_lang_key); ?>">
                             <button type="submit" name="telegram_send_item" value="<?php echo $__j; ?>" class="button" style="padding:.3rem .6rem;">Enviar a Telegram</button>
-                        </div>
-                    <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             <?php $__j++; endforeach; else: ?><p>No se pudo cargar el fichero rss_en.xml o está vacío.</p><?php endif; ?>
             <div class="button-group">
