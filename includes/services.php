@@ -46,7 +46,7 @@ if (!function_exists('telex_write_json')) {
     }
 }
 
-if (!function_exists('telex_generate_suggestion_id')) {
+if (!function_exists(\'telex_remove_link_from_description\')) {\n    function telex_remove_link_from_description(string $description, string $link): string\n    {\n        $description = trim($description);\n        $link = trim($link);\n\n        if ($description === \'\' || $link === \'\') {\n            return $description;\n        }\n\n        // Try to remove the full link\n        $description = str_replace($link, \'\', $description);\n\n        // Try to remove common variations of the link (e.g., without http/https, www)\n        $parsed_link = parse_url($link);\n        if ($parsed_link && isset($parsed_link[\'host\'])) {\n            $host = $parsed_link[\'host\'];\n            $description = str_replace($host, \'\', $description);\n            $description = str_replace(\'www.\' . $host, \'\', $description);\n        }\n\n        // Remove any remaining common URL patterns (more aggressive)\n        $description = preg_replace(\'~https?://\S+~i\', \'\', $description);\n        $description = preg_replace(\'~\b\S+\.(com|org|net|es|coop)\b~i\', \'\', $description); // Basic domain removal\n\n        // Clean up extra spaces or punctuation left behind\n        $description = preg_replace(\'/\\s+/\', \' \', $description);\n        $description = preg_replace(\'/[.,;:\\-—]+\\s*$/\', \'\', $description);\n\n        return trim($description);\n    }\n}\n\nif (!function_exists(\'telex_generate_suggestion_id\')) {
     function telex_generate_suggestion_id(): string
     {
         $milliseconds = (int)round(microtime(true) * 1000);

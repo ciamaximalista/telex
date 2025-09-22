@@ -2202,6 +2202,17 @@ if (!empty($telegram_bots)) {
         .log-entry pre { background-color: #f0f0f0; padding: 0.75rem; border-radius: 4px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
         .log-entry strong { color: var(--primary-color); }
         .log-entry .error { color: var(--danger-color); font-weight: bold; }
+        .footer-fixed {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: var(--light-gray);
+            padding: 1rem 0;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+            z-index: 999;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -2249,8 +2260,8 @@ if (!empty($telegram_bots)) {
                             <input type="hidden" name="active_tab" value="gemini">
                             <input type="hidden" name="suggestion_id" value="<?php echo htmlspecialchars($sug['id']); ?>">
                             <div class="form-group"><label>Título:</label><input type="text" name="title" value="<?php echo htmlspecialchars($sug['title']); ?>"></div>
-                            <div class="form-group"><label>Descripción:</label><textarea name="description" rows="5"><?php echo htmlspecialchars($sug['summary']); ?></textarea></div>
-                            <div class="form-group"><label>Enlace:</label><input type="url" name="link" value="<?php echo htmlspecialchars($sug['link']); ?>"></div>
+                            <div class="form-group"><label>Descripción:</label><textarea name="description" rows="5"><?php echo htmlspecialchars(telex_remove_link_from_description($sug['summary'], $sug['link'])); ?></textarea></div>
+                            <div class="form-group"><label><a href="<?php echo htmlspecialchars($sug['link']); ?>" target="_blank" rel="noopener noreferrer">Enlace:</a></label><input type="url" name="link" value="<?php echo htmlspecialchars($sug['link']); ?>"></div>
                             <div class="button-group">
                                 <button type="submit" name="action" value="approve" class="button approve">Aprobar</button>
                                 <button type="submit" name="action" value="edit" class="button">Guardar y Aprobar</button>
@@ -2639,11 +2650,13 @@ if (!empty($telegram_bots)) {
         </div>
     </div>
 
-    <p style="text-align:center; font-size:12px; color:#6c757d; margin-top:16px;">
+<div class="footer-fixed">
+    <p style="font-size:12px; color:#6c757d;">
       Telex es software libre bajo licencia
       <a href="https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12" target="_blank" rel="noopener">EUPL v1.2</a>
       creado por <a href="https://maximalista.coop" target="_blank" rel="noopener">Compañía Maximalista S.Coop.</a>
     </p>
+</div>
 </div>
 
 <script>
