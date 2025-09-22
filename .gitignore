@@ -1,7 +1,9 @@
 /data
 /logs
 /node_modules
-.env
+/img
+/.git
+.gitignore
 rss.xml
 rss_en.xml
 communalia.xml
