@@ -558,6 +558,12 @@ if (!function_exists('telex_save_rss_document')) {
             return $b['ts'] <=> $a['ts'];
         });
 
+        // Limitar a 200 ítems
+        $maxItems = 200;
+        if (count($records) > $maxItems) {
+            $records = array_slice($records, 0, $maxItems);
+        }
+
         $seen = [];
         $channel = $xpath->query('/rss/channel')->item(0);
         foreach ($records as $rec) {
@@ -898,18 +904,33 @@ if (isset($_POST['action'])) {
 
     if ($suggestion_index !== false) {
         $suggestion = $sugerencias[$suggestion_index];
-        $finalMessage = ''; $decision = '';
-        $descPlain = '';
+        $finalTitle = '';
+        $finalDescription = '';
+        $finalLink = '';
+
         switch ($_POST['action']) {
-            case 'approve': $finalMessage = $suggestion['summary']; $decision = 'enviada';   break;
-            case 'edit':    $finalMessage = $_POST['summary'];       $decision = 'editada';  break;
-            case 'reject':                                           $decision = 'descartada';   break;
+            case 'approve':
+                $finalTitle = $suggestion['title'] ?? '';
+                $finalDescription = $suggestion['summary'] ?? '';
+                $finalLink = $suggestion['link'] ?? '';
+                $decision = 'enviada';
+                break;
+            case 'edit':
+                $finalTitle = $_POST['title'] ?? '';
+                $finalDescription = $_POST['description'] ?? '';
+                $finalLink = $_POST['link'] ?? '';
+                $decision = 'editada';
+                break;
+            case 'reject':
+                $decision = 'descartada';
+                break;
         }
+
         // Añadir entrada al RSS (sin Telegram)
-        if (!empty($finalMessage)) {
-            $descPlain = telex_description_plain($finalMessage, $suggestion['title'] ?? '');
+        if (!empty($finalTitle) && !empty($finalDescription)) {
+            $descPlain = telex_description_plain($finalDescription, $finalTitle);
             if ($descPlain === '') {
-                $descPlain = trim((string)$finalMessage);
+                $descPlain = trim((string)$finalDescription);
             }
             if ($descPlain !== '') {
                 // Cargar o crear rss.xml
@@ -917,92 +938,61 @@ if (isset($_POST['action'])) {
                 if (file_exists($rss_file)) {
                     $rss = simplexml_load_file($rss_file);
                 } else {
-                $rss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
-                $rss->channel->addChild('title', 'Maximalismo — Noticias (ES)');
-                $rss->channel->addChild('link', 'https://maximalismo.org/feed/');
-                $rss->channel->addChild('description', 'Noticias seleccionadas y editadas desde Telex.');
-                $rss->channel->addChild('language', 'es');
-                $rss->channel->addChild('pubDate', date(DATE_RSS));
-            }
-
-            // Evitar duplicados por link/guid
-            $existingKeys = [];
-            if (isset($rss->channel->item)) {
-                foreach ($rss->channel->item as $it) {
-                    $ek = trim((string)($it->link ?? '')) ?: trim((string)($it->guid ?? ''));
-                    if ($ek !== '') $existingKeys[$ek] = true;
+                    $rss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
+                    $rss->channel->addChild('title', 'Maximalismo — Noticias (ES)');
+                    $rss->channel->addChild('link', 'https://maximalismo.org/feed/');
+                    $rss->channel->addChild('description', 'Noticias seleccionadas y editadas desde Telex.');
+                    $rss->channel->addChild('language', 'es');
+                    $rss->channel->addChild('pubDate', date(DATE_RSS));
                 }
-            }
 
-            $link = $suggestion['link'] ?? '';
-            $guid = $link !== '' ? $link : ('telex:' . md5(($suggestion['title'] ?? '') . '|' . $descPlain . '|' . microtime(true)));
-            if (!isset($existingKeys[$guid])) {
-                $item = $rss->channel->addChild('item');
-                $derived = derive_title_from_summary($descPlain);
-                if ($derived !== '') {
-                    $descPlain = telex_description_plain($descPlain, $derived);
-                    if ($descPlain === '') {
-                        $descPlain = trim((string)$finalMessage);
+                // Evitar duplicados por link/guid
+                $existingKeys = [];
+                if (isset($rss->channel->item)) {
+                    foreach ($rss->channel->item as $it) {
+                        $ek = trim((string)($it->link ?? '')) ?: trim((string)($it->guid ?? ''));
+                        if ($ek !== '') $existingKeys[$ek] = true;
                     }
                 }
-                $item->addChild('title', htmlspecialchars($derived !== '' ? $derived : ($suggestion['title'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
-                if ($link) { $item->addChild('link', htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')); }
-                $item->addChild('guid', htmlspecialchars($guid, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
-                $descNode = $item->addChild('description');
-                $descNode[0] = null; // limpiar texto previo
-                $descDom = dom_import_simplexml($descNode);
-                if ($descDom) {
-                    $ownerDoc = $descDom->ownerDocument;
-                    $descDom->appendChild($ownerDoc->createCDATASection($descPlain));
-                } else {
-                    $item->description = $descPlain;
-                }
-                // Añadir content:encoded con HTML estructurado
-                $contentNode = $item->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/');
-                if ($contentNode) {
-                    $contentDom = dom_import_simplexml($contentNode);
-                    if ($contentDom) {
-                        $ownerDoc = $contentDom->ownerDocument;
-                        $contentHtml = telex_build_html_from_text($descPlain);
-                        $contentDom->appendChild($ownerDoc->createCDATASection($contentHtml));
-                    }
-                }
-                $item->addChild('pubDate', date(DATE_RSS));
 
-                // Limitar a 200 ítems (si supera, recorta los más antiguos)
-                $maxItems = 200;
-                $items = $rss->channel->item;
-                if (count($items) > $maxItems) {
-                    $toRemove = count($items) - $maxItems;
-                    // SimpleXML carece de unset directo fiable; reconstruimos
-                    $newRss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel></channel></rss>');
-                    foreach ($rss->channel->children() as $child) {
-                        if ($child->getName() !== 'item') {
-                            $newRss->channel->addChild($child->getName(), (string)$child);
+                $link = $finalLink;
+                $guid = $link !== '' ? $link : ('telex:' . md5($finalTitle . '|' . $descPlain . '|' . microtime(true)));
+                if (!isset($existingKeys[$guid])) {
+                    $item = $rss->channel->addChild('item');
+                    $item->addChild('title', htmlspecialchars($finalTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                    if ($link) { $item->addChild('link', htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')); }
+                    $item->addChild('guid', htmlspecialchars($guid, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                    $descNode = $item->addChild('description');
+                    $descNode[0] = null;
+                    $descDom = dom_import_simplexml($descNode);
+                    if ($descDom) {
+                        $ownerDoc = $descDom->ownerDocument;
+                        $descDom->appendChild($ownerDoc->createCDATASection($descPlain));
+                    } else {
+                        $item->description = $descPlain;
+                    }
+                    // Añadir content:encoded con HTML estructurado
+                    $contentNode = $item->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/');
+                    if ($contentNode) {
+                        $contentDom = dom_import_simplexml($contentNode);
+                        if ($contentDom) {
+                            $ownerDoc = $contentDom->ownerDocument;
+                            $contentHtml = telex_build_html_from_text($descPlain);
+                            $contentDom->appendChild($ownerDoc->createCDATASection($contentHtml));
                         }
                     }
-                    $i = 0;
-                    foreach ($items as $it) {
-                        if ($i++ < $toRemove) continue;
-                        $ni = $newRss->channel->addChild('item');
-                        foreach ($it->children() as $c) { $ni->addChild($c->getName(), (string)$c); }
-                    }
-                    $rss = $newRss;
+                    $item->addChild('pubDate', date(DATE_RSS));
+
+                    // Guardar rss.xml con formato
+                    telex_save_rss_document($rss, $rss_file);
                 }
 
-                // Guardar rss.xml con formato
-                telex_save_rss_document($rss, $rss_file);
-            }
-
-                $published[] = ['title' => $suggestion['title'], 'text' => $descPlain, 'timestamp' => date('c')];
+                $published[] = ['title' => $finalTitle, 'text' => $descPlain, 'timestamp' => date('c'), 'link' => $finalLink];
             }
         }
-        $examples[] = [ 'title' => $suggestion['title'], 'link'  => $suggestion['link'], 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => !empty($descPlain) ? $descPlain : $suggestion['summary'] ];
-        $sent_titles[] = $suggestion['title'];
-        $sent_titlekeys[] = title_key($suggestion['title']);
-        if (!empty($_POST['edited_title'])) {
-            $sent_titlekeys[] = title_key($_POST['edited_title']);
-        }
+        $examples[] = [ 'title' => $finalTitle, 'link'  => $finalLink, 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => $descPlain ];
+        $sent_titles[] = $finalTitle;
+        $sent_titlekeys[] = title_key($finalTitle);
         array_splice($sugerencias, $suggestion_index, 1);
         file_put_contents($sugerencias_file, json_encode($sugerencias, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         file_put_contents($examples_file,     json_encode($examples,     JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -1069,8 +1059,12 @@ if (isset($_POST['action'])) {
             if ($xml && isset($xml->channel)) {
                 $new = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
                 foreach ($xml->channel->children() as $child) { if ($child->getName() !== 'item') { $new->channel->addChild($child->getName(), (string)$child); } }
-                $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace = false; $dom->formatOutput = true; $dom->loadXML($new->asXML()); $dom->save($rss_file);
-                $message = 'Todas las entradas eliminadas de rss.xml.'; $message_type = 'success';
+                $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace = false; $dom->formatOutput = true; $dom->loadXML($new->asXML());
+                if (safe_dom_save($dom, $rss_file)) {
+                    $message = 'Todas las entradas eliminadas de rss.xml.'; $message_type = 'success';
+                } else {
+                    $message = 'No se pudo guardar rss.xml (vacío).'; $message_type = 'error';
+                }
             } else { $message = 'rss.xml mal formado.'; $message_type = 'error'; }
         } else { $message = 'No se puede escribir en rss.xml.'; $message_type = 'error'; }
     }
@@ -1101,7 +1095,12 @@ if (isset($_POST['action'])) {
                         if (isset($content->encoded)) { $c=$ni->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/'); $cd=dom_import_simplexml($c); if($cd){$cd->appendChild($cd->ownerDocument->createCDATASection((string)$content->encoded));} }
                         if (isset($it->enclosure)) { $enc=$ni->addChild('enclosure'); foreach($it->enclosure->attributes() as $k=>$v){ $enc->addAttribute($k,(string)$v);} }
                     }
-                    $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace=false; $dom->formatOutput=true; $dom->loadXML($new->asXML()); $dom->save($rss_file);
+                    $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace=false; $dom->formatOutput=true; $dom->loadXML($new->asXML());
+                    if (safe_dom_save($dom, $rss_file)) {
+                        $message = 'Entrada movida en rss.xml.'; $message_type = 'success';
+                    } else {
+                        $message = 'No se pudo guardar rss.xml tras mover la entrada.'; $message_type = 'error';
+                    }
                 }
             }
         }
@@ -1224,7 +1223,11 @@ if (isset($_POST['action'])) {
                         if (isset($it->enclosure)) { $enc=$ni->addChild('enclosure'); foreach($it->enclosure->attributes() as $k=>$v){ $enc->addAttribute($k,(string)$v);} }
                     }
                     $dom = new DOMDocument('1.0'); $dom->preserveWhiteSpace=false; $dom->formatOutput=true; $dom->loadXML($new->asXML());
-                    safe_dom_save($dom, $rss_en_file);
+                    if (safe_dom_save($dom, $rss_en_file)) {
+                        $message = 'Entrada movida en ' . htmlspecialchars($target_feed_filename) . '.'; $message_type = 'success';
+                    } else {
+                        $message = 'No se pudo guardar ' . htmlspecialchars($target_feed_filename) . ' tras mover la entrada.'; $message_type = 'error';
+                    }
                 }
             }
         }
@@ -1347,12 +1350,20 @@ if (isset($_POST['action'])) {
             $ext = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
             $allowed = ['jpg','jpeg','png','gif','webp'];
             if (in_array($ext, $allowed)) {
-                $safe = preg_replace('/[^a-zA-Z0-9._-]/','_', $fname);
+                $safe = preg_replace('/[^a-zA-Z0-9._-]/u','_', $fname);
                 $uniq = uniqid('img_', true) . '.' . $ext;
                 $dest = $img_dir . '/' . $uniq;
-                if (@move_uploaded_file($_FILES['manual_image']['tmp_name'], $dest)) {
+                if (move_uploaded_file($_FILES['manual_image']['tmp_name'], $dest)) {
                     $imagePathRel = 'img/' . $uniq;
+                } else {
+                    $message = 'Error al mover el archivo subido. Comprueba permisos de la carpeta img/.';
+                    $message_type = 'error';
+                    goto after_manual_item;
                 }
+            } else {
+                $message = 'Tipo de archivo de imagen no permitido.';
+                $message_type = 'error';
+                goto after_manual_item;
             }
         }
         if (!$imagePathRel && $imgUrlInput !== '') {
@@ -1414,8 +1425,16 @@ if (isset($_POST['action'])) {
                 $descDom = dom_import_simplexml($descNode);
                 if ($descDom) {
                     $ownerDoc = $descDom->ownerDocument;
-                    $descDom->appendChild($ownerDoc->createCDATASection($descPlain));
-                } else { $item->description = $descPlain; }
+                    $descriptionContent = $descPlain;
+                    if ($imagePathRel !== '') {
+                        $safeImg = htmlspecialchars($imagePathRel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        // Prepend the image tag to the description
+                        $descriptionContent = '<p><img src="' . $safeImg . '" alt="" style="max-width:100%; height:auto;" /></p>' . $descriptionContent;
+                    }
+                    $descDom->appendChild($ownerDoc->createCDATASection($descriptionContent));
+                } else {
+                    $item->description = $descPlain; // Fallback, won't include image
+                }
 
                 // content:encoded con HTML enriquecido (imagen opcional)
                 $contentNode = $item->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/');
@@ -1582,10 +1601,8 @@ if (isset($_POST['action'])) {
             $message = 'Selecciona un idioma para el bot de Telegram.'; $message_type = 'error';
         } else if ($token === '') {
             $message = 'Introduce el token del bot de Telegram.'; $message_type = 'error';
-        } else if (!preg_match('/^[0-9]{6,}:[A-Za-z0-9_-]{10,}$/', $token)) {
-            // Validación simple del formato de token
-            $message = 'Token de Telegram con formato no reconocido.'; $message_type = 'error';
-        } else {
+        } else if ($chat === '') {
+            $message = 'Introduce el Chat ID del bot de Telegram.'; $message_type = 'error';
             // Validación ligera de chat id: @canal o id numérico (p.ej. -100...)
             if ($chat !== '' && !preg_match('/^@[A-Za-z0-9_]{3,}$/', $chat) && !preg_match('/^-?\d{5,}$/', $chat)) {
                 $message = 'Chat ID no válido. Usa @canal o un ID numérico.'; $message_type = 'error';
@@ -1625,7 +1642,9 @@ if (isset($_POST['action'])) {
         $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
         if ($lang === '' || !isset($bots[$lang])) {
             $message = 'No se encontró el bot para actualizar.'; $message_type = 'error';
-        } else if ($chat !== '' && !preg_match('/^@[A-Za-z0-9_]{3,}$/', $chat) && !preg_match('/^-?\d{5,}$/', $chat)) {
+        } else if ($chat === '') {
+            $message = 'Introduce el Chat ID del bot de Telegram.'; $message_type = 'error';
+        } else if (!preg_match('/^@[A-Za-z0-9_]{3,}$/', $chat) && !preg_match('/^-?\d{5,}$/', $chat)) {
             $message = 'Chat ID no válido. Usa @canal o un ID numérico.'; $message_type = 'error';
         } else {
             // Asegurar estructura
@@ -2083,12 +2102,12 @@ if (!empty($telegram_bots)) {
             <?php if (!empty($sugerencias_pendientes)): ?>
                 <?php foreach ($sugerencias_pendientes as $sug): ?>
                     <div class="item">
-                        <h3><?php echo htmlspecialchars($sug['title']); ?></h3>
                         <form method="post">
                             <input type="hidden" name="active_tab" value="gemini">
                             <input type="hidden" name="suggestion_id" value="<?php echo htmlspecialchars($sug['id']); ?>">
-                            <div class="form-group"><label>Resumen Sugerido:</label><textarea name="summary"><?php echo htmlspecialchars($sug['summary']); ?></textarea></div>
-                            <div class="form-group"><p><strong>Enlace:</strong> <a href="<?php echo htmlspecialchars($sug['link']); ?>" target="_blank" rel="noopener noreferrer">Ver noticia original</a></p></div>
+                            <div class="form-group"><label>Título:</label><input type="text" name="title" value="<?php echo htmlspecialchars($sug['title']); ?>"></div>
+                            <div class="form-group"><label>Descripción:</label><textarea name="description" rows="5"><?php echo htmlspecialchars($sug['summary']); ?></textarea></div>
+                            <div class="form-group"><label>Enlace:</label><input type="url" name="link" value="<?php echo htmlspecialchars($sug['link']); ?>"></div>
                             <div class="button-group">
                                 <button type="submit" name="action" value="approve" class="button approve">Aprobar</button>
                                 <button type="submit" name="action" value="edit" class="button">Guardar y Aprobar</button>
@@ -2121,7 +2140,7 @@ if (!empty($telegram_bots)) {
             <input type="hidden" name="active_tab" value="rss">
             <input type="hidden" id="move_dir" name="dir" value="">
             <input type="hidden" id="move_idx" name="idx" value="">
-            <?php $__i=0; if (!empty($rss_items_actuales)): foreach(array_slice($rss_items_actuales, 0, 32) as $item): ?>
+            <?php $__i=0; if (!empty($rss_items_actuales)): foreach(array_slice($rss_items_actuales, 0, 200) as $item): ?>
                 <div class="item">
                     <input type="hidden" name="rss_guid[]" value="<?php echo htmlspecialchars((string)$item->guid); ?>">
                     <input type="hidden" name="rss_date[]" value="<?php echo htmlspecialchars((string)$item->pubDate); ?>">
@@ -2185,7 +2204,7 @@ if (!empty($telegram_bots)) {
             <input type="hidden" name="active_tab" value="traduccion">
             <input type="hidden" id="en_move_dir" name="en_dir" value="">
             <input type="hidden" id="en_move_idx" name="en_idx" value="">
-            <?php $__j=0; if (!empty($rss_en_items_actuales)): foreach(array_slice($rss_en_items_actuales, 0, 20) as $item): ?>
+            <?php $__j=0; if (!empty($rss_en_items_actuales)): foreach(array_slice($rss_en_items_actuales, 0, 200) as $item): ?>
                 <div class="item">
                     <div class="form-group item-row"><label style="min-width:60px;">Título (<?php echo htmlspecialchars($translated_lang_name); ?>):</label><input class="grow" type="text" name="rss_en_title[]" value="<?php echo htmlspecialchars((string)$item->title); ?>">
                         <div class="controls" style="display:flex; align-items:center; gap:.5rem;">

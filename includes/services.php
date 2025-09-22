@@ -532,6 +532,11 @@ if (!function_exists('telex_translate_feed')) {
                 $new->channel->addChild($child->getName(), (string)$child);
             }
         }
+        // Limitar a 200 ítems
+        $maxItems = 200;
+        if (count($translatedItems) > $maxItems) {
+            $translatedItems = array_slice($translatedItems, 0, $maxItems);
+        }
         foreach ($translatedItems as $entry) {
             $item = $new->channel->addChild('item');
             $item->addChild('title', $entry['title']);
