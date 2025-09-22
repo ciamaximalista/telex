@@ -465,7 +465,6 @@ if (!function_exists('telex_description_plain')) {
         $content = html_entity_decode($content, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $content = preg_replace("/[\r\n]+/u", "\n", $content);
         $content = preg_replace("/\s+/u", ' ', $content);
-        $content = telex_strip_leading_title($content, $title);
         return trim($content);
     }
 }
@@ -712,7 +711,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // 2.1 Recibir Telex (nuevo generador de sugerencias)
     if (isset($_POST['fetch_suggestions'])) {
-        @file_put_contents($gemini_log_file, '');
 
         $result = telex_generate_suggestions(
             $config,
@@ -940,6 +938,8 @@ if (isset($_POST['action'])) {
                 libxml_use_internal_errors(true);
                 if (file_exists($rss_file)) {
                     $rss = simplexml_load_file($rss_file);
+                    // DEBUG: Items in RSS after load: 
+                    error_log("DEBUG: Items in RSS after load: " . (isset($rss->channel->item) ? count($rss->channel->item) : 0));
                 } else {
                     $rss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
                     $rss->channel->addChild('title', 'Maximalismo — Noticias (ES)');
@@ -1974,18 +1974,24 @@ if (file_exists($rss_en_file)) {
 
 // <<<< --- TAREA 2: CARGAR Y PROCESAR EL LOG DE GEMINI --- >>>>
 $gemini_logs = [];
+$summary_logs = []; // New array for summary logs
 if (file_exists($gemini_log_file)) {
     $log_content = file_get_contents($gemini_log_file);
-    // Dividimos por saltos de línea y filtramos líneas vacías
     $log_lines = array_filter(explode("\n", trim($log_content)));
     foreach ($log_lines as $line) {
         $decoded = json_decode($line, true);
         if (is_array($decoded)) {
-            $gemini_logs[] = $decoded;
+            if (isset($decoded['type']) && $decoded['type'] === 'summary') {
+                $summary_logs[] = $decoded;
+            } else {
+                // Keep individual request logs for now, if needed for other display
+                $gemini_logs[] = $decoded;
+            }
         }
     }
     // Mostramos los logs más recientes primero
-    $gemini_logs = array_reverse($gemini_logs);
+    $gemini_logs = array_reverse($gemini_logs); // Individual logs
+    $summary_logs = array_reverse($summary_logs); // Summary logs
 }
 
 // Personalizaciones: detectar feeds activas por idioma
@@ -2083,8 +2089,10 @@ if (!empty($telegram_bots)) {
             $is_sent = !empty($telegram_sent[$lc][$key]);
             $is_forgotten = !empty($telegram_forgotten[$lc][$key]);
             $row = ['idx'=>$idx, 'title'=>$title, 'link'=>$link, 'sent'=> $is_sent, 'forgotten' => $is_forgotten];
-            if (!$is_sent && !$is_forgotten) { $pending[] = $row; }
-            $all[] = $row;
+            if (!$is_sent && !$is_forgotten) {
+                $pending[] = $row;
+                $all[] = $row; // Only add to $all if it's pending
+            }
             $idx++;
             if ($idx >= 200) break; // no cargar demasiados
         }
@@ -2107,12 +2115,14 @@ if (!empty($telegram_bots)) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        :root { --primary-color: #0d6efd; --success-color: #198754; --danger-color: #dc3545; --light-gray: #f8f9fa; --gray: #dee2e6; --dark-gray: #212529; --font-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif; }
+        * { box-sizing: border-box; }
+        :root { --primary-color: #0d6efd; --success-color: #198754; --danger-color: #dc3545; --light-gray: #f8f9fa; --gray: #dee2e6; --dark-gray: #212529; --font-sans-serif: 'Roboto', system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
         body { font-family: var(--font-sans-serif); margin: 0; background-color: var(--light-gray); color: var(--dark-gray); line-height: 1.6; }
         .container { max-width: 900px; margin: 2rem auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         h1, h2 { border-bottom: 1px solid var(--gray); padding-bottom: 0.5rem; margin-top: 0; margin-bottom: 1.5rem; font-weight: 500; }
-        .item { border: 1px solid var(--gray); padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 5px; background: #fff; }
+        .item { border: 1px solid var(--gray); padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 5px; background: #fff; overflow: hidden; }
         .form-group { margin-bottom: 1rem; }
         .form-group label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
         .form-group input, .form-group textarea { width: 100%; padding: 0.75rem; box-sizing: border-box; border: 1px solid var(--gray); border-radius: 4px; font-size: 1rem; }
@@ -2133,29 +2143,25 @@ if (!empty($telegram_bots)) {
             gap: 0.5rem;
         }
         .tab-link {
-            padding: 0.6rem 1.2rem;
+            padding: 0.5rem 1rem;
             cursor: pointer;
             background-color: transparent;
             color: var(--dark-gray);
-            border-radius: 0.3rem;
-            font-size: 0.95rem;
+            font-family: "Special Elite", system-ui;
+            font-weight: 400;
             text-decoration: none;
-            transition: all 0.3s ease;
+            transition: transform 0.3s ease, color 0.3s ease;
             position: relative;
-            overflow: hidden;
-            font-weight: 500;
+            font-size: 0.9rem;
         }
         .tab-link:hover {
-            background-color: rgba(0, 0, 0, 0.05);
-            color: var(--dark-gray);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            color: var(--primary-color);
         }
         .tab-link.active {
-            background-color: var(--primary-color);
-            color: white;
+            background-color: transparent;
+            color: var(--primary-color);
             font-weight: 600;
-            transform: translateY(-1px);
+            font-size: 1.1rem;
         }
         .tab-link.active::after {
             content: '';
@@ -2164,7 +2170,7 @@ if (!empty($telegram_bots)) {
             left: 0;
             width: 100%;
             height: 3px;
-            background-color: white;
+            background-color: var(--primary-color);
             transform: scaleX(1);
             transition: transform 0.3s ease;
         }
@@ -2180,13 +2186,15 @@ if (!empty($telegram_bots)) {
             transition: transform 0.3s ease;
         }
         .tab-link:not(.active):hover::after {
-            transform: scaleX(0.5);
+            transform: scaleX(0.8);
         }
-        .tab-content { display: none; }
+        .tab-content { display: none; width: 100%; }
         .tab-content.active { display: block; }
-        .source-item { display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center; }
-        .source-item input[name="source_name[]"] { flex-basis: 30%; }
-        .source-item input[name="source_url[]"] { flex-basis: 60%; }
+        .source-item { display: flex; align-items: center; margin-bottom: 0.5rem; }
+        .source-item input { margin-right: 1rem; }
+        .source-item input[name="source_name[]"] { flex: 1; }
+        .source-item input[name="source_url[]"] { flex: 2; }
+        .source-item button { flex-shrink: 0; }
         .logout-form { position: absolute; top: 1rem; right: 2rem; }
         .floating-action-button {
             position: absolute;
@@ -2199,20 +2207,41 @@ if (!empty($telegram_bots)) {
         /* <<<< --- TAREA 2: ESTILOS PARA LA PESTAÑA DE LOG --- >>>> */
         .log-entry { font-family: monospace; font-size: 0.9em; }
         .log-entry summary { cursor: pointer; font-weight: bold; margin-bottom: 0.5rem; }
-        .log-entry pre { background-color: #f0f0f0; padding: 0.75rem; border-radius: 4px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+        .log-entry pre {
+            background-color: #f0f0f0;
+            padding: 0.75rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            word-wrap: break-word; /* Added for better word breaking */
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: auto;
+            max-width: 100%;
+        }
         .log-entry strong { color: var(--primary-color); }
         .log-entry .error { color: var(--danger-color); font-weight: bold; }
-        .footer-fixed {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: var(--light-gray);
-            padding: 1rem 0;
-            box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
-            z-index: 999;
+        .app-footer {
             text-align: center;
+            padding: 1.5rem 1rem;
+            margin-top: 2rem;
+            background-color: var(--light-gray);
+            color: var(--dark-gray);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--gray);
         }
+        .app-footer p {
+            margin: 0;
+            line-height: 1.4;
+        }
+        .app-footer img {
+            width: 30px;
+            height: 30px;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+            filter: sepia(100%) saturate(500%) hue-rotate(300deg);
+        }
+
     </style>
 </head>
 <body>
@@ -2626,37 +2655,36 @@ if (!empty($telegram_bots)) {
     <div id="gemini_log" class="tab-content<?php echo $active_tab === 'gemini_log' ? ' active' : ''; ?>">
         <h2>Log de Peticiones a Gemini</h2>
         <div class="item">
-        <?php if (!empty($gemini_logs)): ?>
-            <?php foreach ($gemini_logs as $log): ?>
+        <?php if (!empty($summary_logs)): ?>
+            <h3>Resumen de las últimas 16 ejecuciones:</h3>
+            <?php foreach (array_slice($summary_logs, 0, 16) as $log): ?>
                 <div class="log-entry item">
                     <p>
-                        <strong>Time:</strong> <?php echo htmlspecialchars($log['timestamp'] ?? 'N/A'); ?><br>
-                        <strong>Title:</strong> <?php echo htmlspecialchars($log['title'] ?? 'N/A'); ?>
+                        <strong>Fecha:</strong> <?php echo htmlspecialchars($log['timestamp'] ?? 'N/A'); ?><br>
+                        <strong>Artículos procesados:</strong> <?php echo htmlspecialchars($log['total_processed'] ?? 0); ?><br>
+                        <strong>Sugerencias generadas:</strong> <?php echo htmlspecialchars($log['created'] ?? 0); ?><br>
+                        <strong>Artículos rechazados:</strong> <?php echo htmlspecialchars($log['skipped'] ?? 0); ?><br>
+                        <strong>Errores:</strong> <?php echo htmlspecialchars($log['errors'] ?? 0); ?>
                     </p>
-                    <?php if (isset($log['error'])): ?>
-                        <p class="error">ERROR: <?php echo htmlspecialchars($log['error']); ?></p>
-                    <?php else: ?>
-                        <p><strong>Respuesta:</strong> <?php echo htmlspecialchars(substr($log['response'] ?? '', 0, 150)); ?>...</p>
-                    <?php endif; ?>
-                    <details>
-                        <summary>Ver Prompt Completo (<?php echo htmlspecialchars($log['promptLength'] ?? 'N/A'); ?> caracteres)</summary>
-                        <pre><?php echo htmlspecialchars($log['prompt'] ?? 'Prompt no disponible.'); ?></pre>
-                    </details>
                 </div>
             <?php endforeach; ?>
         <?php else: ?>
-            <p>El log de Gemini está vacío. Pulsa "Recibir Telex" para generar uno.</p>
+            <p>No hay resúmenes de ejecución de Gemini. Pulsa "Recibir Telex" para generar uno.</p>
         <?php endif; ?>
         </div>
     </div>
 
-<div class="footer-fixed">
-    <p style="font-size:12px; color:#6c757d;">
+</div>
+
+</div>
+
+<div class="app-footer">
+    <p>
+      <img src="maximalista.png" alt="Maximalista Logo">
       Telex es software libre bajo licencia
       <a href="https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12" target="_blank" rel="noopener">EUPL v1.2</a>
       creado por <a href="https://maximalista.coop" target="_blank" rel="noopener">Compañía Maximalista S.Coop.</a>
     </p>
-</div>
 </div>
 
 <script>

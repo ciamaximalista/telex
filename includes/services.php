@@ -422,6 +422,17 @@ if (!function_exists('telex_generate_suggestions')) {
 
         telex_write_json($suggestions_file, $existing);
 
+        // Add a summary log entry for the entire run
+        $summaryLogEntry = [
+            'timestamp' => date('c'),
+            'type' => 'summary',
+            'created' => $created,
+            'skipped' => $skipped,
+            'errors' => $errors,
+            'total_processed' => $created + $skipped + $errors,
+        ];
+        @file_put_contents($log_file, json_encode($summaryLogEntry, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
+
         if ($created === 0 && $errors > 0) {
             return [ 'ok' => false, 'message' => 'No se generaron sugerencias (verifica el log de Gemini).' ];
         }
