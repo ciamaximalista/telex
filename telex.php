@@ -192,8 +192,11 @@ ensure_file($cache_titles_file, "[]\n");
 ensure_file($titlekeys_file, "[]\n");
 ensure_file($sources_file, "[]\n");
 ensure_file($gemini_log_file, "");
-ensure_file($rss_change_cache, "{}\n");
-ensure_file($translation_cache, "{}\n");
+ensure_file($rss_change_cache, "{}");
+ensure_file($translation_cache, "{}");
+ensure_file($telegram_tokens_file, "{}");
+ensure_file($telegram_sent_file, "{}");
+ensure_file($data_dir . '/telegram_forgotten.json', "{}");
 if (!file_exists($prompt_file)) {
     $default_prompt = "CRITERIOS...\n- Usa {{title}}, {{description}}, {{link}} y {{examples}}.\nSalida: una línea, ≤40 palabras, o IGNORAR.";
     @file_put_contents($prompt_file, $default_prompt);
@@ -1287,6 +1290,41 @@ if (isset($_POST['action'])) {
         }
     }
 
+    if (isset($_POST['telegram_forget_all'])) {
+        $active_tab = 'telegram';
+        $lang = strtolower(trim($_POST['lang'] ?? ''));
+        if ($lang === '') {
+            $message = 'No se indicó el idioma para olvidar los items.'; $message_type = 'error';
+        } else {
+            $feed_file = __DIR__ . '/' . feed_filename_for_lang($lang, $feed_custom);
+            libxml_use_internal_errors(true);
+            $xml = simplexml_load_file($feed_file);
+            if ($xml && isset($xml->channel->item)) {
+                $forgotten = file_exists($data_dir . '/telegram_forgotten.json') ? (json_decode(@file_get_contents($data_dir . '/telegram_forgotten.json'), true) ?: []) : [];
+                if (!isset($forgotten[$lang])) { $forgotten[$lang] = []; }
+
+                $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
+                if (!isset($sent[$lang])) { $sent[$lang] = []; }
+
+                $forgottenCount = 0;
+                foreach ($xml->channel->item as $it) {
+                    $parts = rss_item_parts($it);
+                    $key = $parts['url'];
+                    if ($key === '') continue;
+                    if (!empty($sent[$lang][$key])) continue; // ya enviado
+                    if (!empty($forgotten[$lang][$key])) continue; // ya olvidado
+
+                    $forgotten[$lang][$key] = true;
+                    $forgottenCount++;
+                }
+                @file_put_contents($data_dir . '/telegram_forgotten.json', json_encode($forgotten, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                $message = 'Telegram ' . htmlspecialchars($lang) . ': ' . $forgottenCount . ' items olvidados.'; $message_type = 'success';
+            } else {
+                $message = 'Feed mal formada para ' . htmlspecialchars($lang) . '.'; $message_type = 'error';
+            }
+        }
+    }
+
     // Enviar un item individual a Telegram (forzar)
     if (isset($_POST['telegram_send_item'])) {
         $idx  = isset($_POST['idx']) ? intval($_POST['idx']) : (isset($_POST['telegram_send_item']) ? intval($_POST['telegram_send_item']) : -1);
@@ -1333,6 +1371,48 @@ if (isset($_POST['action'])) {
                 else { $message = 'Error al enviar a Telegram: ' . htmlspecialchars($resp['error']); $message_type = 'error'; }
             } else { $message = 'No se encontró el item solicitado.'; $message_type = 'error'; }
         }
+        }
+    }
+
+    if (isset($_POST['telegram_forget_item'])) {
+        $idx  = isset($_POST['idx']) ? intval($_POST['idx']) : (isset($_POST['telegram_forget_item']) ? intval($_POST['telegram_forget_item']) : -1);
+        $lang = strtolower(trim($_POST['lang'] ?? ''));
+        if ($lang === '' && isset($_POST['rss_item_lang']) && is_array($_POST['rss_item_lang']) && isset($_POST['rss_item_lang'][$idx])) {
+            $lang = strtolower((string)$_POST['rss_item_lang'][$idx]);
+        }
+        if ($lang === '' && isset($_POST['rss_en_item_lang']) && is_array($_POST['rss_en_item_lang']) && isset($_POST['rss_en_item_lang'][$idx])) {
+            $lang = strtolower((string)$_POST['rss_en_item_lang'][$idx]);
+        }
+        $from_tab = $_POST['from_tab'] ?? '';
+        if ($from_tab === '' && isset($_POST['rss_item_tab']) && is_array($_POST['rss_item_tab']) && isset($_POST['rss_item_tab'][$idx])) {
+            $from_tab = (string)$_POST['rss_item_tab'][$idx];
+        }
+        if ($from_tab === '' && isset($_POST['rss_en_item_tab']) && is_array($_POST['rss_en_item_tab']) && isset($_POST['rss_en_item_tab'][$idx])) {
+            $from_tab = (string)$_POST['rss_en_item_tab'][$idx];
+        }
+        if ($from_tab === '') { $from_tab = 'telegram'; }
+        $active_tab = $from_tab;
+
+        if ($lang === '') {
+            $message = 'No se indicó el idioma para olvidar el item.'; $message_type = 'error';
+        } else {
+            $feed_file = ($lang === 'es') ? $rss_file : (__DIR__ . '/' . feed_filename_for_lang($lang, $feed_custom));
+            libxml_use_internal_errors(true);
+            $xml = simplexml_load_file($feed_file);
+            if ($xml && isset($xml->channel->item[$idx])) {
+                $it = $xml->channel->item[$idx];
+                $parts = rss_item_parts($it);
+                $key   = $parts['url'];
+
+                $forgotten = file_exists($data_dir . '/telegram_forgotten.json') ? (json_decode(@file_get_contents($data_dir . '/telegram_forgotten.json'), true) ?: []) : [];
+                if (!isset($forgotten[$lang])) { $forgotten[$lang] = []; }
+                if ($key !== '') { $forgotten[$lang][$key] = true; }
+                @file_put_contents($data_dir . '/telegram_forgotten.json', json_encode($forgotten, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+                $message = 'Entrada marcada como olvidada (' . htmlspecialchars($lang) . ').'; $message_type = 'success';
+            } else {
+                $message = 'No se encontró el item solicitado para olvidar.'; $message_type = 'error';
+            }
         }
     }
     // Añadir entrada manual (otras fuentes)
@@ -1967,6 +2047,7 @@ foreach ($active_lang_files as $lc => $fname) {
 // Datos para pestaña Telegram
 $telegram_langs_data = [];
 $telegram_sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
+$telegram_forgotten = file_exists($data_dir . '/telegram_forgotten.json') ? (json_decode(@file_get_contents($data_dir . '/telegram_forgotten.json'), true) ?: []) : [];
 if (!empty($telegram_bots)) {
     foreach ($active_lang_files as $lc => $fname) {
         $bot = $telegram_bots[$lc] ?? null;
@@ -1990,7 +2071,7 @@ if (!empty($telegram_bots)) {
             @file_put_contents($telegram_sent_file, json_encode($telegram_sent, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
 
-        // Calcular pendientes y preparar listado (limit 20)
+        // Calcular pendientes y preparar listado (limit 200)
         $pending = [];
         $all = [];
         $idx = 0;
@@ -1999,8 +2080,10 @@ if (!empty($telegram_bots)) {
             $link  = (string)($it->link ?? '');
             $guid  = (string)($it->guid ?? '');
             $key   = $link !== '' ? $link : $guid;
-            $row = ['idx'=>$idx, 'title'=>$title, 'link'=>$link, 'sent'=> !empty($telegram_sent[$lc][$key])];
-            if (empty($telegram_sent[$lc][$key])) { $pending[] = $row; }
+            $is_sent = !empty($telegram_sent[$lc][$key]);
+            $is_forgotten = !empty($telegram_forgotten[$lc][$key]);
+            $row = ['idx'=>$idx, 'title'=>$title, 'link'=>$link, 'sent'=> $is_sent, 'forgotten' => $is_forgotten];
+            if (!$is_sent && !$is_forgotten) { $pending[] = $row; }
             $all[] = $row;
             $idx++;
             if ($idx >= 200) break; // no cargar demasiados
@@ -2009,7 +2092,7 @@ if (!empty($telegram_bots)) {
             'lang' => $lc,
             'filename' => $fname,
             'pending' => $pending,
-            'all' => array_slice($all, 0, 20),
+            'all' => array_slice($all, 0, 200),
         ];
     }
 }
@@ -2043,15 +2126,74 @@ if (!empty($telegram_bots)) {
         .message { padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px; text-align: center; font-weight: 500; }
         .message.success { background-color: #d1e7dd; color: #0f5132; }
         .message.error { background-color: #f8d7da; color: #842029; }
-        .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--gray); margin-bottom: 1.5rem; }
-        .tab-link { padding: 0.75rem 1.5rem; cursor: pointer; background: transparent; border: none; border-bottom: 3px solid transparent; font-size: 1rem; }
-        .tab-link.active { border-bottom-color: var(--primary-color); font-weight: 600; }
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+            gap: 0.5rem;
+        }
+        .tab-link {
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            background-color: transparent;
+            color: var(--dark-gray);
+            border-radius: 0.3rem;
+            font-size: 0.95rem;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            font-weight: 500;
+        }
+        .tab-link:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+            color: var(--dark-gray);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .tab-link.active {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 600;
+            transform: translateY(-1px);
+        }
+        .tab-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: white;
+            transform: scaleX(1);
+            transition: transform 0.3s ease;
+        }
+        .tab-link:not(.active)::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: var(--primary-color);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        .tab-link:not(.active):hover::after {
+            transform: scaleX(0.5);
+        }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .source-item { display: flex; gap: 1rem; margin-bottom: 0.5rem; align-items: center; }
         .source-item input[name="source_name[]"] { flex-basis: 30%; }
         .source-item input[name="source_url[]"] { flex-basis: 60%; }
         .logout-form { position: absolute; top: 1rem; right: 2rem; }
+        .floating-action-button {
+            position: absolute;
+            top: 1rem;
+            right: 10rem; /* Adjust as needed to be above 'Salir' */
+            z-index: 1000;
+        }
         .special-elite-regular {font-family: "Special Elite", system-ui; font-weight: 400;font-style: normal; font-size:2.4em; color:#0d6efd; padding:16px; padding-top:0px; }
         
         /* <<<< --- TAREA 2: ESTILOS PARA LA PESTAÑA DE LOG --- >>>> */
@@ -2067,6 +2209,13 @@ if (!empty($telegram_bots)) {
     <form method="get" class="logout-form">
         <button type="submit" name="logout" value="1" class="button reject">Salir</button>
     </form>
+
+    <div class="floating-action-button">
+        <form method="post">
+            <input type="hidden" name="active_tab" value="gemini">
+            <button type="submit" name="fetch_suggestions" class="button approve">📡 Recibir Telex</button>
+        </form>
+    </div>
     
     <a href="telex.php"><img src="telex.png" alt="Telex" style="float:right; width:60px; height:auto; object-fit:contain;" /></a>
     <h1 class="special-elite-regular">Telex</h1>
@@ -2089,13 +2238,7 @@ if (!empty($telegram_bots)) {
     </div>
 
     <div id="gemini" class="tab-content<?php echo $active_tab === 'gemini' ? ' active' : ''; ?>">
-        <div class="item">
-            <h2>Acciones</h2>
-            <form method="post">
-                <input type="hidden" name="active_tab" value="gemini">
-                <button type="submit" name="fetch_suggestions" class="button">📡 Recibir Telex</button>
-            </form>
-        </div>
+
         
         <div id="suggestions-container">
             <h2>Telex Pendientes</h2>
@@ -2243,18 +2386,22 @@ if (!empty($telegram_bots)) {
                     <input type="hidden" name="active_tab" value="telegram">
                     <input type="hidden" name="lang" value="<?php echo htmlspecialchars($tg['lang']); ?>">
                     <button type="submit" name="telegram_send_all" class="button approve">Enviar pendientes</button>
+                    <button type="submit" name="telegram_forget_all" class="button reject" style="margin-left:.5rem;">Olvidar todos</button>
                 </form>
                 <div>
                     <p style="margin:.5rem 0 .3rem;">Últimos items</p>
                     <?php foreach ($tg['all'] as $row): ?>
                         <div class="form-group item-row" style="align-items:center; gap:.5rem;">
-                            <span class="grow"><strong><?php echo htmlspecialchars($row['title']); ?></strong><br><small><?php echo htmlspecialchars($row['link']); ?></small><?php echo $row['sent']? ' — <em style="color:#198754;">enviado</em>':''; ?></span>
+                            <span class="grow"><strong><?php echo htmlspecialchars($row['title']); ?></strong><br><small><?php echo htmlspecialchars($row['link']); ?></small><?php echo $row['sent']? ' — <em style="color:#198754;">enviado</em>':($row['forgotten']? ' — <em style="color:#6c757d;">olvidado</em>':''); ?></span>
                             <form method="post" style="margin:0;">
                                 <input type="hidden" name="active_tab" value="telegram">
                                 <input type="hidden" name="from_tab" value="telegram">
                                 <input type="hidden" name="lang" value="<?php echo htmlspecialchars($tg['lang']); ?>">
                                 <input type="hidden" name="idx" value="<?php echo intval($row['idx']); ?>">
                                 <button type="submit" name="telegram_send_item" class="button" style="padding:.3rem .6rem;">Enviar este</button>
+                                <?php if (!$row['sent'] && !$row['forgotten']): ?>
+                                <button type="submit" name="telegram_forget_item" class="button reject" style="padding:.3rem .6rem; margin-left:.5rem;">Olvidar</button>
+                                <?php endif; ?>
                             </form>
                         </div>
                     <?php endforeach; ?>

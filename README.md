@@ -1,163 +1,156 @@
 # Telex
 
-- Telex es una app web ligera en PHP para:
-  - Leer un grupo masivo de fuentes RSS y generar sugerencias de selección con Gemini (pestaña “Telex”).
-  - Aprobar/editar y publicar un feed `rss.xml` en español.
-  - Traducir automáticamente ese feed a `rss_<idioma>.xml` (por defecto `rss_en.xml`).
-  - Editar ambos feeds desde la interfaz y gestionar fuentes, prompt, claves y procesos.
+Telex es una aplicación web ligera desarrollada en PHP, diseñada para simplificar la gestión de contenidos RSS. Permite automatizar la curación de noticias mediante inteligencia artificial (Gemini), publicar y traducir feeds RSS, y distribuirlos a través de Telegram.
 
-Estado: incluye integración opcional con Telegram (bots por idioma y envío automático/manual).
+## Características Principales
 
-Características
+Telex te ofrece un control completo sobre tu flujo de noticias con las siguientes funcionalidades:
 
-- Pestañas de la interfaz (`telex.php`):
-  - Telex: recibir sugerencias (Gemini), aprobar/editar/rechazar; añadir entradas manuales (“otras fuentes”).
-  - RSS: editar `rss.xml` (mover ↑/↓, editar campos, eliminar seleccionados o todos).
-  - Traducción: ver/editar `rss_<idioma>.xml`, cambiar idioma objetivo y “Forzar traducción ahora”.
-  - Telegram: enviar entradas a canales de Telegram por idioma (pendientes o individuales).
-  - Prompt: editar el prompt con variables `{{title}} {{description}} {{link}} {{examples}}`.
-  - Fuentes: añadir/ordenar/eliminar feeds de entrada.
-  - Log: visor del log JSONL de llamadas a Gemini.
-  - Configuración: claves (`GEMINI_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`), modelo (`GEMINI_MODEL`), pruebas/diagnóstico y ajustes del traductor. Incluye:
-    - Bots de Telegram por idioma (token + Chat ID `@canal` o ID numérico) con listado y eliminación.
-    - Opción “Telegram (ES): enviar automáticamente al aprobar” (activada por defecto).
-    - Personalizaciones: cambiar nombre de archivo por idioma activo, y el `title`/`description` del canal RSS.
-- Generación/edición de `rss.xml` y traducción a `rss_<idioma>.xml` (bajo demanda) con caché de traducción.
-- Ficheros de datos planos en `data/` creados automáticamente si faltan.
+*   **Curación Inteligente con Gemini (Pestaña "Telex")**:
+    *   **Generación de Sugerencias**: Lee un gran volumen de fuentes RSS externas y utiliza la IA de Gemini para generar sugerencias de noticias relevantes.
+    *   **Edición Detallada**: Las sugerencias de Gemini no se presentan como un bloque de texto único, sino que se dividen en **campos editables de Título, Descripción y Enlace**. Esto te permite refinar cada detalle antes de la publicación.
+    *   **Aprobación y Rechazo**: Decide qué sugerencias son adecuadas para tu feed.
+    *   **Entradas Manuales**: Añade noticias de "otras fuentes" manualmente, utilizando la misma estructura editable de Título, Descripción y Enlace. El título que introduzcas se usará **tal cual** en el feed RSS.
+    *   **Subida de Imágenes Mejorada**: El formulario de entrada manual ahora gestiona la subida de imágenes (desde archivo o URL) de forma más robusta, incluyendo la etiqueta `<img>` en la descripción del ítem RSS para una mejor visibilidad.
 
-Arquitectura
+*   **Gestión Avanzada de Feeds RSS (Pestañas "RSS" y "Traducción")**:
+    *   **Edición Directa**: Edita los ítems de tu `rss.xml` principal y de los feeds traducidos (`rss_<idioma>.xml`) directamente desde la interfaz.
+    *   **Visualización Ampliada**: Ambas pestañas ahora muestran hasta **200 ítems** para una gestión más completa.
+    *   **Ordenación por Fecha**: Los ítems se muestran y se guardan automáticamente ordenados de **más reciente a más antiguo**.
+    *   **Reordenación Temporal**: Los cursores (flechas ↑/↓) te permiten reordenar los ítems manualmente. Ten en cuenta que esta reordenación es temporal y se restablecerá al orden por fecha la próxima vez que se guarde el feed (por ejemplo, al añadir una nueva entrada).
+    *   **Eliminación Flexible**: Elimina ítems seleccionados o vacía el feed completo.
 
-- PHP puro:
-  - `telex.php`: UI principal y orquestación de acciones (sugerencias, feeds, traducción, Telegram).
-  - `includes/config.php`: carga/guardado de `data/config.json`, migración desde el antiguo `pm2_env.json` y utilidades de acceso a configuración.
-  - `includes/services.php`: helpers para Gemini, agregación de feeds, generación de sugerencias, traducción con Google Translate y utilidades de persistencia.
-- Datos en `data/` (JSON y logs) gestionados con escrituras atómicas.
+*   **Traducción Automática**:
+    *   **Feeds Multilingües**: Traduce automáticamente tu feed principal (`rss.xml`) a otros idiomas, generando archivos como `rss_en.xml`, `rss_fr.xml`, etc.
+    *   **Control de Idioma**: Cambia el idioma objetivo de la traducción y fuerza la traducción en cualquier momento.
 
-Requisitos
+*   **Integración con Telegram (Opcional)**:
+    *   **Configuración de Bots**: Configura bots de Telegram por idioma, especificando el token y el **Chat ID (ahora obligatorio)** del canal.
+    *   **Envío Automático/Manual**: Envía entradas automáticamente a canales de Telegram al aprobarlas, o envíalas manualmente una a una.
 
-- PHP 7.4+ con: `mbstring`, `intl` (Normalizer), `dom`, `simplexml`, `curl`.
-- Servidor web (Apache/Nginx) con PHP.
+*   **Personalización y Control**:
+    *   **Prompt Editable**: Ajusta el prompt que se envía a Gemini para generar sugerencias, utilizando variables como `{{title}}`, `{{description}}`, `{{link}}`, `{{examples}}`.
+    *   **Gestión de Fuentes**: Añade, ordena y elimina las fuentes RSS de las que Telex extrae noticias.
+    *   **Registro de Actividad**: Visualiza un log detallado de las llamadas a la API de Gemini.
+    *   **Configuración Centralizada**: Gestiona claves de API (Gemini, Google Translate), modelos de IA, ajustes de Telegram y personaliza los nombres y metadatos de tus archivos RSS por idioma.
 
-Instalación
+## Arquitectura
 
-1) Clonar el repositorio
+Telex está construido con una arquitectura sencilla y eficiente:
 
-```
-git clone https://github.com/ciamaximalista/telex.git
-cd telex
-```
+*   **PHP Puro**:
+    *   `telex.php`: La interfaz de usuario principal, que orquesta todas las acciones (sugerencias, gestión de feeds, traducción, Telegram).
+    *   `includes/config.php`: Maneja la carga y guardado de la configuración (`data/config.json`) y utilidades relacionadas.
+    *   `includes/services.php`: Contiene funciones auxiliares para la integración con Gemini, la agregación de feeds, la generación de sugerencias, la traducción con Google Translate y la persistencia de datos.
+*   **Datos Planos**: Todos los datos de la aplicación (configuración, sugerencias, logs) se almacenan en ficheros JSON y de texto plano dentro del directorio `data/`, gestionados con escrituras atómicas para mayor seguridad.
 
-2) Configurar el servidor web
+## Requisitos
 
-- Sirve el proyecto apuntando a la carpeta donde están `index.html` y `telex.php`.
-- Verifica que PHP tiene permisos de escritura sobre:
-  - Directorio `data/` (y `img/` si subes imágenes).
-  - Ficheros `rss.xml` y `rss_<idioma>.xml` (p. ej., `rss_en.xml`).
-  - Archivo `data/config.json` (la pestaña Configuración lo crea o migra automáticamente).
-- La app utiliza `umask(0002)` para facilitar la colaboración por grupo.
+*   **PHP 7.4+** con las extensiones: `mbstring`, `intl` (para `Normalizer`), `dom`, `simplexml`, `curl`.
+*   Un servidor web (Apache/Nginx) configurado para servir aplicaciones PHP.
 
-3) Permisos y propiedad (Debian/Ubuntu)
+## Instalación
 
-Recomendado si el servidor web usa `www-data`:
+1.  **Clonar el repositorio**:
+    ```bash
+    git clone https://github.com/ciamaximalista/telex.git
+    cd telex
+    ```
 
-```
-sudo chgrp -R www-data .
-sudo chmod -R g+rwX .
-sudo find . -type d -exec chmod g+s {} \;
-```
+2.  **Configurar el servidor web**:
+    *   Apunta tu servidor web a la carpeta donde se encuentran `index.html` y `telex.php`.
+    *   **Permisos de escritura**: Asegúrate de que el usuario del servidor web (ej. `www-data` en Debian/Ubuntu) tenga permisos de escritura sobre:
+        *   El directorio `data/` y todos sus contenidos.
+        *   El directorio `img/` (esencial para la subida de imágenes manuales).
+        *   Los ficheros `rss.xml` y `rss_<idioma>.xml` (ej. `rss_en.xml`).
+        *   El archivo `data/config.json`.
+    *   La aplicación utiliza `umask(0002)` para facilitar la colaboración en entornos de grupo.
 
-- Si ya existen `rss.xml` o `rss_<idioma>.xml` con otro propietario y no se actualizan, corrige propiedad o elimínalos para que la app los regenere:
+3.  **Ajustar permisos y propiedad (ej. en Debian/Ubuntu)**:
+    Si el servidor web usa `www-data`, ejecuta:
+    ```bash
+    sudo chgrp -R www-data .
+    sudo chmod -R g+rwX .
+    sudo find . -type d -exec chmod g+s {} \;
+    ```
+    Si encuentras problemas con `rss.xml` o `rss_<idioma>.xml` que no se actualizan debido a permisos incorrectos, puedes corregir la propiedad:
+    ```bash
+    sudo chown www-data:www-data rss.xml rss_en.xml # Ajusta según el idioma objetivo
+    ```
 
-```
-sudo chown www-data:www-data rss.xml rss_en.xml  # ajusta según el idioma objetivo
-```
+4.  **Primer acceso y credenciales**:
+    *   Abre `telex.php` en tu navegador. Si no hay credenciales configuradas, serás redirigido a `register.php` para crear el usuario inicial.
+    *   Podrás cambiar la contraseña desde la pestaña "Configuración" más adelante.
 
-4) Primer acceso y credenciales
+5.  **Configuración Inicial (`data/config.json`)**:
+    Accede a la pestaña "Configuración" y completa los siguientes campos (se guardarán automáticamente en `data/config.json`):
+    *   `GEMINI_API_KEY`: Tu clave de API de Google AI Studio (Gemini).
+    *   `GEMINI_MODEL`: El modelo de Gemini a utilizar (ej. `gemini-1.5-flash-latest`).
+    *   `GOOGLE_TRANSLATE_API_KEY`: Tu clave de API de Google Cloud Translation.
+    *   **Telegram**: Configura tus bots de Telegram por idioma. Recuerda que el **Chat ID es ahora obligatorio** para que el bot funcione correctamente en la pestaña "Telegram".
+    *   Opcional: Activa/desactiva el envío automático a Telegram (ES) y ajusta el intervalo sugerido del traductor.
+    Desde esta pestaña, puedes probar la conectividad con las APIs de Gemini y Google Translate.
 
-- Abre `telex.php`. Si no hay credenciales, se mostrará `register.php` para crear el usuario inicial.
-- Podrás cambiar la contraseña desde la pestaña Configuración más adelante.
+## Uso Básico
 
-5) Configuración (`data/config.json`)
+1.  **Generar Sugerencias**: Ve a la pestaña "Telex" y haz clic en "📡 Recibir Telex". La aplicación buscará nuevas noticias en tus fuentes configuradas y generará sugerencias con Gemini.
+2.  **Revisar y Publicar**:
+    *   Revisa las sugerencias pendientes en la pestaña "Telex".
+    *   **Edita el Título, Descripción y Enlace** directamente en los campos provistos.
+    *   Haz clic en "Aprobar" para añadir la entrada a `rss.xml` o "Guardar y Aprobar" si has realizado ediciones.
+    *   También puedes "Añadir entrada de otras fuentes" manualmente, incluyendo imágenes.
+3.  **Gestionar Feeds RSS**:
+    *   En las pestañas "RSS" y "Traducción", puedes editar los campos de los ítems, moverlos (temporalmente), eliminar seleccionados o todos, y guardar los cambios.
+    *   La ordenación por defecto es de más reciente a más antiguo.
+4.  **Traducir Feeds**: En la pestaña "Traducción", selecciona el idioma objetivo y haz clic en "Traducir ahora" para generar o actualizar `rss_<idioma>.xml`.
+5.  **Enviar a Telegram**: Si tienes bots configurados, puedes enviar entradas pendientes o individuales a tus canales de Telegram desde la pestaña "Telegram".
 
-Entra en “Configuración” y completa (se guardará en `data/config.json`):
+## Integración con Telegram (Detalle)
 
-- `GEMINI_API_KEY`: clave de Google AI Studio (Gemini).
-- `GEMINI_MODEL`: por ejemplo `gemini-1.5-flash-latest`.
-- `GOOGLE_TRANSLATE_API_KEY`: clave de Cloud Translation.
-- Opcional: activa/desactiva el envío automático a Telegram (ES) y ajusta el intervalo sugerido del traductor.
+*   **Configuración**: En "Configuración" -> "Bots de Telegram por idioma", añade el token de tu bot y el Chat ID del canal (ej. `@mi_canal` o un ID numérico como `-1001234567890`). El Chat ID es ahora un campo obligatorio.
+*   **Envío Automático (ES)**: Si la opción "Telegram (ES): enviar automáticamente al aprobar" está activada y tienes un bot configurado para español, las entradas aprobadas o añadidas manualmente se enviarán automáticamente.
+*   **Envío Manual**: Si el envío automático está desactivado, verás un botón "Enviar a Telegram" debajo de cada entrada en las pestañas "RSS" y "Traducción" para enviarla manualmente.
+*   **Formato de Envío**: Los mensajes se envían con el título en negrita, la imagen (si existe), la descripción en texto plano y el enlace.
 
-Desde esa pestaña puedes probar ambas integraciones.
+## Cambio de Idioma de la Segunda Feed
 
-Uso básico
+*   Por defecto, la segunda feed se traduce al inglés (`rss_en.xml`).
+*   Desde la pestaña "Traducción", puedes seleccionar cualquier otro idioma. El archivo resultante será `rss_<idioma>.xml` (ej. `rss_fr.xml`), sin sobrescribir feeds de otros idiomas existentes.
 
-- Telex → “Recibir Telex”: ejecuta el generador de sugerencias (Gemini) y carga resultados.
-- Revisa, edita y “Aprobar” para añadir a `rss.xml`. También puedes “Añadir entrada de otras fuentes” manualmente.
-- Al aprobar una entrada, el título del ítem en la feed se deriva automáticamente del resumen final: se toma el texto hasta el primer punto (`.`), cierre de exclamación (`!`) o cierre de interrogación (`?`). Si no se encuentra ninguno, se recorta a ~140 caracteres.
-- RSS/Traducción: edita, mueve ↑/↓, elimina seleccionados o todos, y guarda.
-- Traducción → “Guardar idioma de traducción” para cambiar el idioma objetivo; “Forzar traducción ahora” para generar `rss_<idioma>.xml` al instante.
-- Fuentes: gestiona tus feeds de entrada.
-- Prompt: ajusta el prompt con variables `{{title}} {{description}} {{link}} {{examples}}`.
-- Log: inspecciona `data/gemini_log.jsonl` desde la pestaña Log.
+## Estructura de Ficheros
 
-Integración con Telegram (opcional)
+*   `telex.php`: Interfaz principal (pestañas, lógica de guardado, pruebas y acciones de traducción/sugerencias).
+*   `includes/config.php`: Gestión de `data/config.json` y migraciones.
+*   `includes/services.php`: Funciones auxiliares para Gemini, feeds, traducción y persistencia.
+*   `data/`: Directorio autogenerado para el estado de la aplicación, incluyendo:
+    *   `sugerencias_pendientes.json`, `examples.json`, `published_messages.json`
+    *   `.sent_titles_cache.json`, `.sent_titlekeys_cache.json`
+    *   `sources.json`, `prompt.txt`, `gemini_log.jsonl`
+    *   `rss_change_cache.json`, `translation_cache.json`
+    *   `telegram_tokens.json` (tokens y Chat ID por idioma)
+    *   `telegram_sent.json` (ítems enviados a Telegram por idioma)
+    *   `feed_customizations.json` (nombre de archivo, título y descripción de feeds por idioma)
+*   `img/`: Directorio para imágenes subidas manualmente.
 
-- Configuración → Bots de Telegram por idioma:
-  - Añade el token del bot y el Chat ID del canal (formato `@canal` o ID numérico tipo `-100...`).
-  - Puedes editar el Chat ID de cada idioma sin reescribir el token.
-- Envío automático (ES):
-  - Opción “Telegram (ES): enviar automáticamente al aprobar” (activada por defecto). Si hay bot y Chat ID para español, al aprobar o añadir manualmente se envía automáticamente al canal de ES.
-  - Si esta opción está desactivada y existe bot/Chat ID para ES, en la pestaña RSS verás un botón “Enviar a Telegram” debajo de cada entrada para enviarla manualmente.
-- Pestaña Telegram (visible si hay bots configurados):
-  - Un bloque por idioma con bot y Chat ID configurados. Muestra el archivo de feed y el número de pendientes (los existentes la primera vez se consideran enviados).
-  - Botón “Enviar pendientes” y botones “Enviar este” por item.
-- Formato de envío a Telegram (para cualquier idioma):
-  - Título en negrita (Markdown)
-  - Imagen si existe (enclosure o primera imagen de la descripción)
-  - Dos saltos de línea
-  - Descripción (texto plano)
-  - Dos saltos de línea
-  - URL
+## Solución de Problemas
 
-Cambio de idioma de la segunda feed
+*   `rss_<idioma>.xml` no cambia: Verifica la conectividad con Google Translate en "Configuración" ("Probar Translate"), usa "Traducir ahora" (con la opción *Ignorar caché* si es necesario) y revisa los permisos de escritura.
+*   Gemini falla: Usa "Probar Gemini" en "Configuración" y verifica tu clave de API y el modelo seleccionado.
+*   **Subida de imágenes falla**: Asegúrate de que el directorio `img/` tenga permisos de escritura para el usuario del servidor web.
+*   Permisos generales: El usuario del servidor web debe poder escribir en `data/`, `img/`, `data/config.json`, `rss.xml` y `rss_<idioma>.xml`.
 
-- Por defecto se traduce al inglés (`rss_en.xml`).
-- Desde “Traducción” puedes seleccionar otro idioma. El archivo objetivo será `rss_<idioma>.xml` (no sobrescribe otros idiomas previos).
+## Seguridad de Secretos
 
-Estructura de ficheros
+*   El directorio `data/` incluye un `.htaccess` con `Require all denied` para impedir el acceso directo a ficheros sensibles (como `config.json`).
+*   **Importante**: No publiques `data/config.json` con claves reales en repositorios públicos.
 
-- `telex.php`: interfaz principal (pestañas, guardado, pruebas y acciones de traducción/sugerencias).
-- `includes/config.php`: gestión de `data/config.json` y migraciones desde `pm2_env.json`.
-- `includes/services.php`: helpers para Gemini, feeds, traducción y persistencia.
-- `data/`: estado de la app (autogenerado):
-  - `sugerencias_pendientes.json`, `examples.json`, `published_messages.json`
-  - `.sent_titles_cache.json`, `.sent_titlekeys_cache.json`
-  - `sources.json`, `prompt.txt`, `gemini_log.jsonl`
-  - `rss_change_cache.json`, `translation_cache.json`
-  - `telegram_tokens.json` (tokens y Chat ID por idioma)
-  - `telegram_sent.json` (ítems enviados a Telegram por idioma)
-  - `feed_customizations.json` (nombre de archivo, título y descripción de feeds por idioma)
+## Actualizaciones
 
-Solución de problemas
-
-- `rss_<idioma>.xml` no cambia: revisa “Probar Translate”, usa “Traducir ahora” (con la opción *Ignorar caché* si procede) y verifica permisos.
-- Gemini falla: usa “Probar Gemini” y verifica clave/modelo.
-- Permisos: el usuario del servidor web debe poder escribir `data/`, `img/`, `data/config.json`, `rss.xml` y `rss_<idioma>.xml`.
-
-Seguridad de secretos
-
-- `data/` incluye un `.htaccess` con `Require all denied` para impedir el acceso directo a ficheros sensibles (como `config.json`).
-
-Actualizaciones
-
-```
+Para actualizar la aplicación a la última versión:
+```bash
 git pull
 ```
 
-Seguridad
+## Licencia
 
-- Login básico (usuario/contraseña); considera restringir por IP o VPN.
-- No publiques `data/config.json` con claves reales en repositorios públicos.
-
-Licencia
-
-- [EUPL v1.2](https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
+Este software está bajo la licencia [EUPL v1.2](https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12).
