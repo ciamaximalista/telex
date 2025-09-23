@@ -107,6 +107,7 @@ $published_file       = $data_dir . '/published_messages.json';
 $cache_titles_file    = $data_dir . '/.sent_titles_cache.json';
 $titlekeys_file       = $data_dir . '/.sent_titlekeys_cache.json';
 $gemini_log_file      = $data_dir . '/gemini_log.jsonl'; // <-- 1. RUTA DEL NUEVO LOG
+$analysis_prompt_file = $data_dir . '/analysis_prompt.txt';
 // Caches del traductor
 $rss_change_cache     = $data_dir . '/rss_change_cache.json';
 $translation_cache    = $data_dir . '/translation_cache.json';
@@ -580,6 +581,86 @@ if (!function_exists('telex_save_rss_document')) {
     }
 }
 
+if (!function_exists('archive_post')) {
+    function archive_post($item_data) {
+        $archive_dir = __DIR__ . '/archive';
+        if (!is_dir($archive_dir)) {
+            @mkdir($archive_dir, 0755, true);
+        }
+        $archive_file = $archive_dir . '/' . date('Y-m') . '.xml';
+
+        libxml_use_internal_errors(true);
+        $xml = new DOMDocument('1.0', 'UTF-8');
+        $xml->preserveWhiteSpace = false;
+        $xml->formatOutput = true;
+
+        if (file_exists($archive_file)) {
+            $xml->load($archive_file, LIBXML_NSCLEAN);
+        } else {
+            // Crear estructura base si no existe
+            $rss = $xml->createElement('rss');
+            $rss->setAttribute('version', '2.0');
+            $rss->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:content', 'http://purl.org/rss/1.0/modules/content/');
+            $rss->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:dc', 'http://purl.org/dc/elements/1.1/');
+            $xml->appendChild($rss);
+            $channel = $xml->createElement('channel');
+            $rss->appendChild($channel);
+            $title = $xml->createElement('title', 'Telex Archive - ' . date('Y-m'));
+            $channel->appendChild($title);
+            $link = $xml->createElement('link', (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST']);
+            $channel->appendChild($link);
+            $description = $xml->createElement('description', 'Archivo mensual de noticias para ' . date('F Y'));
+            $channel->appendChild($description);
+        }
+
+        $channel = $xml->getElementsByTagName('channel')->item(0);
+        if (!$channel) { return false; }
+
+        $item = $xml->createElement('item');
+
+        // Título
+        $item->appendChild($xml->createElement('title'))->appendChild($xml->createCDATASection($item_data['title']));
+
+        // Link
+        if (!empty($item_data['link'])) {
+            $item->appendChild($xml->createElement('link', htmlspecialchars($item_data['link'])));
+        }
+
+        // Descripción
+        if (!empty($item_data['description'])) {
+            $item->appendChild($xml->createElement('description'))->appendChild($xml->createCDATASection($item_data['description']));
+        }
+
+        // Guid
+        $guid_val = !empty($item_data['link']) ? $item_data['link'] : uniqid('urn:uuid:');
+        $guid = $xml->createElement('guid', htmlspecialchars($guid_val));
+        $guid->setAttribute('isPermaLink', !empty($item_data['link']) ? 'true' : 'false');
+        $item->appendChild($guid);
+
+        // Fecha de publicación
+        $pubDate = $xml->createElement('pubDate', date('r'));
+        $item->appendChild($pubDate);
+
+        // Imagen (enclosure)
+        if (!empty($item_data['image'])) {
+            $enclosure = $xml->createElement('enclosure');
+            $enclosure->setAttribute('url', $item_data['image']);
+            $enclosure->setAttribute('type', 'image/jpeg');
+            $item->appendChild($enclosure);
+        }
+
+        // Insertar al principio del canal
+        $first_item = $channel->getElementsByTagName('item')->item(0);
+        if ($first_item) {
+            $channel->insertBefore($item, $first_item);
+        } else {
+            $channel->appendChild($item);
+        }
+
+        return $xml->save($archive_file) !== false;
+    }
+}
+
 if (!function_exists('tg_send')) {
     function tg_send($token, $chat_id, $title, $desc, $url, $photo_url = '') {
         $t = trim((string)$title);
@@ -988,6 +1069,15 @@ if (isset($_POST['action'])) {
 
                     // Guardar rss.xml con formato
                     telex_save_rss_document($rss, $rss_file);
+
+                    // Archive post
+                    $item_data = [
+                        'title' => $finalTitle,
+                        'link' => $finalLink,
+                        'description' => $descPlain,
+                        'image' => '' // No image info available here
+                    ];
+                    archive_post($item_data);
                 }
 
                 $published[] = ['title' => $finalTitle, 'text' => $descPlain, 'timestamp' => date('c'), 'link' => $finalLink];
@@ -1548,6 +1638,15 @@ if (isset($_POST['action'])) {
                     goto after_manual_item;
                 }
 
+                // Archive post
+                $item_data = [
+                    'title' => $title,
+                    'link' => $link,
+                    'description' => $descPlain,
+                    'image' => $imagePathRel
+                ];
+                archive_post($item_data);
+
                 $message = 'Entrada añadida a rss.xml.';
                 $message_type = 'success';
 
@@ -1915,6 +2014,49 @@ if (isset($_POST['action'])) {
         $message = 'Personalización de feed guardada para ' . htmlspecialchars($lang) . '.'; $message_type = 'success';
     }
 
+    if (isset($_POST['run_analysis'])) {
+        $active_tab = 'analysis';
+
+        // Save the prompt
+        $analysis_prompt = $_POST['analysis_prompt'] ?? '';
+        file_put_contents($analysis_prompt_file, $analysis_prompt);
+
+        $selected_files = $_POST['analysis_files'] ?? [];
+        $gemini_model = $_POST['gemini_model'] ?? 'gemini-1.5-flash-latest';
+        $gemini_key = telex_config_get($config, ['apis', 'gemini', 'api_key'], '');
+
+        if (empty($gemini_key)) {
+            $message = 'Falta la clave de API de Gemini. Configúrala en la pestaña de Config.';
+            $message_type = 'error';
+        } elseif (empty($selected_files)) {
+            $message = 'No has seleccionado ningún archivo para analizar.';
+            $message_type = 'error';
+        } else {
+            $xml_contents = '';
+            foreach ($selected_files as $file) {
+                $safe_path = __DIR__ . '/archive/' . basename($file);
+                if (file_exists($safe_path)) {
+                    $xml_contents .= "--- Contenido de " . basename($file) . " ---\n";
+                    $xml_contents .= file_get_contents($safe_path);
+                    $xml_contents .= "\n\n";
+                }
+            }
+
+            $full_prompt = $analysis_prompt . "\n\n" . $xml_contents;
+
+            $response = telex_gemini_request($gemini_key, $gemini_model, $full_prompt, ['source' => 'analysis'], $gemini_log_file);
+
+            if ($response['ok']) {
+                $_SESSION['analysis_result'] = $response['text'];
+                $message = 'Análisis completado.';
+                $message_type = 'success';
+            } else {
+                $message = 'Error en el análisis: ' . ($response['error'] ?? 'Error desconocido.');
+                $message_type = 'error';
+            }
+        }
+    }
+
     after_post_redirect:
     
     header("Location: telex.php?tab=" . urlencode($active_tab) . "&message=" . urlencode($message) . "&message_type=" . urlencode($message_type));
@@ -1947,9 +2089,23 @@ $sources_actuales = file_exists($sources_file) ? json_decode(@file_get_contents(
 // Bots de Telegram guardados por idioma
 $telegram_bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
 $has_telegram = !empty($telegram_bots);
-$available_tabs = ['gemini', 'rss', 'traduccion', 'config', 'prompt', 'sources', 'gemini_log'];
+$available_tabs = ['gemini', 'rss', 'traduccion', 'config', 'prompt', 'sources', 'gemini_log', 'analysis'];
 if ($has_telegram) { $available_tabs[] = 'telegram'; }
 if (!in_array($active_tab, $available_tabs, true)) { $active_tab = 'gemini'; }
+
+$archive_files = glob(__DIR__ . '/archive/*.xml');
+$analysis_prompt_actual = '';
+if (file_exists($analysis_prompt_file)) {
+    $analysis_prompt_actual = file_get_contents($analysis_prompt_file);
+} else {
+    $analysis_prompt_actual = "Analiza cuidadosamente los archivos XML adjuntos, que contienen noticias clasificadas por meses. Tu tarea consiste en:\n\nComparar y sintetizar el contenido de todos los archivos, observando la evolución de los temas a lo largo del tiempo.\n\nIdentificar tendencias temáticas:\n\ntemas recurrentes,\n\nsu aparición y desaparición,\n\nvariaciones en el énfasis o tratamiento.\n\nResaltar novedades y rupturas: señala temas que emergen por primera vez o cambios llamativos en el periodo total estudiado.\n\nElaborar un informe analítico con un máximo de 5000 palabras, estructurado en:\n\nResumen ejecutivo (visión global en no más de 500 palabras).\n\nAnálisis de tendencias por periodo (cómo evolucionan los temas mes a mes o en bloques temporales significativos).\n\nNovedades destacadas (temas que irrumpen o cambian significativamente).\n\nSíntesis final y conclusiones (qué aprendizajes o implicaciones se derivan del conjunto).\n\nRequisitos de estilo:\n\nUsa un lenguaje claro y analítico, evitando repeticiones innecesarias.\n\nPresenta ejemplos concretos de noticias que ilustren cada tendencia.\n\nEstructura el texto con encabezados y subencabezados para facilitar la lectura. Utiliza formato MarkDown y pon los enlaces que utilices como ejemplos o referencias como notas al pie.\n\nNo superes en ningún caso las 5000 palabras.";
+}
+
+$analysis_result = '';
+if (isset($_SESSION['analysis_result'])) {
+    $analysis_result = $_SESSION['analysis_result'];
+    unset($_SESSION['analysis_result']);
+}
 
 $rss_items_actuales = [];
 if (file_exists($rss_file)) {
@@ -2244,6 +2400,33 @@ if (!empty($telegram_bots)) {
             filter: sepia(100%) saturate(500%) hue-rotate(300deg);
         }
 
+        .result-container {
+            position: relative;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            padding: 1rem;
+        }
+        .result-container pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+        }
+        .result-container .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.3rem 0.6rem;
+            background-color: var(--gray);
+            color: var(--dark-gray);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .result-container .copy-btn:hover {
+            background-color: var(--dark-gray);
+            color: white;
+        }
+
     </style>
 </head>
 <body>
@@ -2269,13 +2452,14 @@ if (!empty($telegram_bots)) {
     <div class="tabs">
         <a href="?tab=gemini" class="tab-link<?php echo $active_tab === 'gemini' ? ' active' : ''; ?>" data-tab="gemini">Telex</a>
         <a href="?tab=rss" class="tab-link<?php echo $active_tab === 'rss' ? ' active' : ''; ?>" data-tab="rss">RSS</a>
-        <a href="?tab=traduccion" class="tab-link<?php echo $active_tab === 'traduccion' ? ' active' : ''; ?>" data-tab="traduccion">Traducción</a>
+        <a href="?tab=traduccion" class="tab-link<?php echo $active_tab === 'traduccion' ? ' active' : ''; ?>" data-tab="traduccion">Trad</a>
         <?php if ($has_telegram): ?>
             <a href="?tab=telegram" class="tab-link<?php echo $active_tab === 'telegram' ? ' active' : ''; ?>" data-tab="telegram">Telegram</a>
         <?php endif; ?>
-        <a href="?tab=config" class="tab-link<?php echo $active_tab === 'config' ? ' active' : ''; ?>" data-tab="config">Configuración</a>
+        <a href="?tab=config" class="tab-link<?php echo $active_tab === 'config' ? ' active' : ''; ?>" data-tab="config">Config</a>
         <a href="?tab=prompt" class="tab-link<?php echo $active_tab === 'prompt' ? ' active' : ''; ?>" data-tab="prompt">Prompt</a>
         <a href="?tab=sources" class="tab-link<?php echo $active_tab === 'sources' ? ' active' : ''; ?>" data-tab="sources">Fuentes</a>
+        <a href="?tab=analysis" class="tab-link<?php echo $active_tab === 'analysis' ? ' active' : ''; ?>" data-tab="analysis">Análisis</a>
         <a href="?tab=gemini_log" class="tab-link<?php echo $active_tab === 'gemini_log' ? ' active' : ''; ?>" data-tab="gemini_log">Log</a>
     </div>
 
@@ -2653,6 +2837,56 @@ if (!empty($telegram_bots)) {
             <button type="submit" name="save_sources" class="button approve">Guardar Todas las Fuentes</button>
         </form>
     </div>
+
+    <div id="analysis" class="tab-content<?php echo $active_tab === 'analysis' ? ' active' : ''; ?>">
+        <h2>Análisis de Archivos</h2>
+        <form class="item" method="post">
+            <input type="hidden" name="active_tab" value="analysis">
+            <h3>1. Seleccionar Archivos</h3>
+            <div class="form-group">
+                <div id="archive-files-list">
+                    <?php if (!empty($archive_files)): ?>
+                        <?php foreach ($archive_files as $file): ?>
+                            <label><input type="checkbox" name="analysis_files[]" value="<?php echo htmlspecialchars($file); ?>"> <?php echo htmlspecialchars(basename($file)); ?></label><br>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p>No se encontraron archivos en el directorio de archivos.</p>
+                    <?php endif; ?>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <button type="button" class="button" onclick="toggleArchiveCheckboxes(true)">Seleccionar Todos</button>
+                    <button type="button" class="button" onclick="toggleArchiveCheckboxes(false)">Desmarcar Todos</button>
+                </div>
+            </div>
+
+            <h3>2. Prompt de Análisis</h3>
+            <div class="form-group">
+                <textarea name="analysis_prompt" style="height: 300px; font-family: monospace;"><?php echo htmlspecialchars($analysis_prompt_actual); ?></textarea>
+            </div>
+
+            <h3>3. Ejecutar Análisis</h3>
+            <div class="form-group">
+                <label>Modelo de Gemini</label>
+                <select name="gemini_model">
+                    <option>gemini-1.5-flash-latest</option>
+                    <option>gemini-1.5-pro-latest</option>
+                    <option>gemini-1.5-flash</option>
+                    <option>gemini-1.5-pro</option>
+                </select>
+            </div>
+            <button type="submit" name="run_analysis" class="button approve">Enviar Telex 📡</button>
+        </form>
+
+        <?php if (!empty($analysis_result)): ?>
+            <h2>Resultado del Análisis</h2>
+            <div class="item">
+                <div class="result-container">
+                    <button class="copy-btn" onclick="copyToClipboard(this)">Copiar</button>
+                    <pre><?php echo htmlspecialchars($analysis_result); ?></pre>
+                </div>
+            </div>
+        <?php endif; ?>
+    </div>
     
     <div id="gemini_log" class="tab-content<?php echo $active_tab === 'gemini_log' ? ' active' : ''; ?>">
         <h2>Log de Peticiones a Gemini</h2>
@@ -2780,6 +3014,26 @@ if (!empty($telegram_bots)) {
 
         openTab(null, activeTab);
     });
+
+    function toggleArchiveCheckboxes(checked) {
+        var checkboxes = document.querySelectorAll('#archive-files-list input[type="checkbox"]');
+        for (var i = 0; i < checkboxes.length; i++) {
+            checkboxes[i].checked = checked;
+        }
+    }
+
+    function copyToClipboard(button) {
+        var pre = button.nextElementSibling;
+        var text = pre.textContent;
+        navigator.clipboard.writeText(text).then(function() {
+            button.textContent = 'Copiado!';
+            setTimeout(function() {
+                button.textContent = 'Copiar';
+            }, 2000);
+        }, function(err) {
+            console.error('Error al copiar: ', err);
+        });
+    }
 </script>
 
 </body>

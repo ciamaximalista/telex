@@ -13,12 +13,18 @@ Telex te ofrece un control completo sobre tu flujo de noticias con las siguiente
     *   **Entradas Manuales**: Añade noticias de "otras fuentes" manualmente, utilizando la misma estructura editable de Título, Descripción y Enlace. El título que introduzcas se usará **tal cual** en el feed RSS.
     *   **Subida de Imágenes Mejorada**: El formulario de entrada manual ahora gestiona la subida de imágenes (desde archivo o URL) de forma más robusta, incluyendo la etiqueta `<img>` en la descripción del ítem RSS para una mejor visibilidad.
 
-*   **Gestión Avanzada de Feeds RSS (Pestañas "RSS" y "Traducción")**:
+*   **Gestión Avanzada de Feeds RSS (Pestañas "RSS" y "Trad")**:
     *   **Edición Directa**: Edita los ítems de tu `rss.xml` principal y de los feeds traducidos (`rss_<idioma>.xml`) directamente desde la interfaz.
     *   **Visualización Ampliada**: Ambas pestañas ahora muestran hasta **200 ítems** para una gestión más completa.
     *   **Ordenación por Fecha**: Los ítems se muestran y se guardan automáticamente ordenados de **más reciente a más antiguo**.
     *   **Reordenación Temporal**: Los cursores (flechas ↑/↓) te permiten reordenar los ítems manualmente. Ten en cuenta que esta reordenación es temporal y se restablecerá al orden por fecha la próxima vez que se guarde el feed (por ejemplo, al añadir una nueva entrada).
     *   **Eliminación Flexible**: Elimina ítems seleccionados o vacía el feed completo.
+
+*   **Análisis Avanzado con IA (Pestaña "Análisis")**:
+    *   **Selección de Archivos**: Elige qué archivos mensuales del histórico (`archive/`) quieres analizar.
+    *   **Prompt Personalizable**: Utiliza un prompt editable para guiar a Gemini en el análisis. El sistema incluye un prompt por defecto enfocado en la identificación de tendencias, temas recurrentes y novedades.
+    *   **Ejecución Flexible**: Selecciona el modelo de Gemini que prefieras para realizar el análisis.
+    *   **Informe Detallado**: El resultado se presenta en un formato de texto claro con un botón para copiarlo fácilmente, ideal para crear informes o documentos de trabajo.
 
 *   **Traducción Automática**:
     *   **Feeds Multilingües**: Traduce automáticamente tu feed principal (`rss.xml`) a otros idiomas, generando archivos como `rss_en.xml`, `rss_fr.xml`, etc.
@@ -80,10 +86,10 @@ Telex está construido con una arquitectura sencilla y eficiente:
 
 4.  **Primer acceso y credenciales**:
     *   Abre `telex.php` en tu navegador. Si no hay credenciales configuradas, serás redirigido a `register.php` para crear el usuario inicial.
-    *   Podrás cambiar la contraseña desde la pestaña "Configuración" más adelante.
+    *   Podrás cambiar la contraseña desde la pestaña "Config" más adelante.
 
 5.  **Configuración Inicial (`data/config.json`)**:
-    Accede a la pestaña "Configuración" y completa los siguientes campos (se guardarán automáticamente en `data/config.json`):
+    Accede a la pestaña "Config" y completa los siguientes campos (se guardarán automáticamente en `data/config.json`):
     *   `GEMINI_API_KEY`: Tu clave de API de Google AI Studio (Gemini).
     *   `GEMINI_MODEL`: El modelo de Gemini a utilizar (ej. `gemini-1.5-flash-latest`).
     *   `GOOGLE_TRANSLATE_API_KEY`: Tu clave de API de Google Cloud Translation.
@@ -100,22 +106,23 @@ Telex está construido con una arquitectura sencilla y eficiente:
     *   Haz clic en "Aprobar" para añadir la entrada a `rss.xml` o "Guardar y Aprobar" si has realizado ediciones.
     *   También puedes "Añadir entrada de otras fuentes" manualmente, incluyendo imágenes.
 3.  **Gestionar Feeds RSS**:
-    *   En las pestañas "RSS" y "Traducción", puedes editar los campos de los ítems, moverlos (temporalmente), eliminar seleccionados o todos, y guardar los cambios.
+    *   En las pestañas "RSS" y "Trad", puedes editar los campos de los ítems, moverlos (temporalmente), eliminar seleccionados o todos, y guardar los cambios.
     *   La ordenación por defecto es de más reciente a más antiguo.
-4.  **Traducir Feeds**: En la pestaña "Traducción", selecciona el idioma objetivo y haz clic en "Traducir ahora" para generar o actualizar `rss_<idioma>.xml`.
+4.  **Traducir Feeds**: En la pestaña "Trad", selecciona el idioma objetivo y haz clic en "Traducir ahora" para generar o actualizar `rss_<idioma>.xml`.
 5.  **Enviar a Telegram**: Si tienes bots configurados, puedes enviar entradas pendientes o individuales a tus canales de Telegram desde la pestaña "Telegram".
 
 ## Integración con Telegram (Detalle)
 
-*   **Configuración**: En "Configuración" -> "Bots de Telegram por idioma", añade el token de tu bot y el Chat ID del canal (ej. `@mi_canal` o un ID numérico como `-1001234567890`). El Chat ID es ahora un campo obligatorio.
+*   **Configuración**: En "Config" -> "Bots de Telegram por idioma", añade el token de tu bot y el Chat ID del canal (ej. `@mi_canal` o un ID numérico como `-1001234567890`). El Chat ID es ahora un campo obligatorio.
+*   **Permisos del Bot**: Es **crucial** que configures el bot como administrador del canal, pero limitando sus privilegios. Asegúrate de que **solo** tenga permiso para "Publicar mensajes". Desactiva todos los demás permisos de administrador para garantizar la seguridad y el funcionamiento correcto.
 *   **Envío Automático (ES)**: Si la opción "Telegram (ES): enviar automáticamente al aprobar" está activada y tienes un bot configurado para español, las entradas aprobadas o añadidas manualmente se enviarán automáticamente.
-*   **Envío Manual**: Si el envío automático está desactivado, verás un botón "Enviar a Telegram" debajo de cada entrada en las pestañas "RSS" y "Traducción" para enviarla manualmente.
+*   **Envío Manual**: Si el envío automático está desactivado, verás un botón "Enviar a Telegram" debajo de cada entrada en las pestañas "RSS" y "Trad" para enviarla manualmente.
 *   **Formato de Envío**: Los mensajes se envían con el título en negrita, la imagen (si existe), la descripción en texto plano y el enlace.
 
 ## Cambio de Idioma de la Segunda Feed
 
 *   Por defecto, la segunda feed se traduce al inglés (`rss_en.xml`).
-*   Desde la pestaña "Traducción", puedes seleccionar cualquier otro idioma. El archivo resultante será `rss_<idioma>.xml` (ej. `rss_fr.xml`), sin sobrescribir feeds de otros idiomas existentes.
+*   Desde la pestaña "Trad", puedes seleccionar cualquier otro idioma. El archivo resultante será `rss_<idioma>.xml` (ej. `rss_fr.xml`), sin sobrescribir feeds de otros idiomas existentes.
 
 ## Estructura de Ficheros
 
@@ -134,8 +141,8 @@ Telex está construido con una arquitectura sencilla y eficiente:
 
 ## Solución de Problemas
 
-*   `rss_<idioma>.xml` no cambia: Verifica la conectividad con Google Translate en "Configuración" ("Probar Translate"), usa "Traducir ahora" (con la opción *Ignorar caché* si es necesario) y revisa los permisos de escritura.
-*   Gemini falla: Usa "Probar Gemini" en "Configuración" y verifica tu clave de API y el modelo seleccionado.
+*   `rss_<idioma>.xml` no cambia: Verifica la conectividad con Google Translate en "Config" ("Probar Translate"), usa "Traducir ahora" (con la opción *Ignorar caché* si es necesario) y revisa los permisos de escritura.
+*   Gemini falla: Usa "Probar Gemini" en "Config" y verifica tu clave de API y el modelo seleccionado.
 *   **Subida de imágenes falla**: Asegúrate de que el directorio `img/` tenga permisos de escritura para el usuario del servidor web.
 *   Permisos generales: El usuario del servidor web debe poder escribir en `data/`, `img/`, `data/config.json`, `rss.xml` y `rss_<idioma>.xml`.
 
