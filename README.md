@@ -1,3 +1,5 @@
+![Telex Banner](banner.jpg)
+
 # Telex
 
 Telex es una aplicación web ligera desarrollada en PHP, diseñada para simplificar la gestión de contenidos RSS. Permite automatizar la curación de noticias mediante inteligencia artificial (Gemini), publicar y traducir feeds RSS, y distribuirlos a través de Telegram.
