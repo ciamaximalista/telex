@@ -1533,7 +1533,7 @@ if (isset($_POST['action'])) {
         $link  = trim($_POST['manual_link'] ?? '');
         $desc  = trim($_POST['manual_description'] ?? '');
         $imgUrlInput = trim($_POST['manual_image_url'] ?? '');
-        $imagePathRel = '';
+        $finalImageUrl = '';
 
         // Subida de imagen (opcional)
         if (!empty($_FILES['manual_image']['name']) && is_uploaded_file($_FILES['manual_image']['tmp_name'])) {
@@ -1546,6 +1546,10 @@ if (isset($_POST['action'])) {
                 $dest = $img_dir . '/' . $uniq;
                 if (move_uploaded_file($_FILES['manual_image']['tmp_name'], $dest)) {
                     $imagePathRel = 'img/' . $uniq;
+                    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                    $host = $_SERVER['HTTP_HOST'];
+                    $path = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+                    $finalImageUrl = $protocol . '://' . $host . $path . '/' . $imagePathRel;
                 } else {
                     $message = 'Error al mover el archivo subido. Comprueba permisos de la carpeta img/.';
                     $message_type = 'error';
@@ -1557,8 +1561,8 @@ if (isset($_POST['action'])) {
                 goto after_manual_item;
             }
         }
-        if (!$imagePathRel && $imgUrlInput !== '') {
-            $imagePathRel = $imgUrlInput; // URL externa o ruta ya servida
+        if ($finalImageUrl === '' && $imgUrlInput !== '') {
+            $finalImageUrl = $imgUrlInput; // URL externa o ruta ya servida
         }
 
         if (file_exists($rss_file) && !is_writable($rss_file)) {
@@ -1617,8 +1621,8 @@ if (isset($_POST['action'])) {
                 if ($descDom) {
                     $ownerDoc = $descDom->ownerDocument;
                     $descriptionContent = $descPlain;
-                    if ($imagePathRel !== '') {
-                        $safeImg = htmlspecialchars($imagePathRel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    if ($finalImageUrl !== '') {
+                        $safeImg = htmlspecialchars($finalImageUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                         // Prepend the image tag to the description
                         $descriptionContent = '<p><img src="' . $safeImg . '" alt="" style="max-width:100%; height:auto;" /></p>' . $descriptionContent;
                     }
@@ -1633,20 +1637,20 @@ if (isset($_POST['action'])) {
                     $contentDom = dom_import_simplexml($contentNode);
                     if ($contentDom) {
                         $ownerDoc = $contentDom->ownerDocument;
-                        $contentHtml = telex_build_html_from_text($descPlain, $imagePathRel);
+                        $contentHtml = telex_build_html_from_text($descPlain, $finalImageUrl);
                         $contentDom->appendChild($ownerDoc->createCDATASection($contentHtml));
                     }
                 }
 
                 // Enclosure (opcional) si la imagen es local o URL directa a imagen
-                if ($imagePathRel !== '') {
-                    $ext = strtolower(pathinfo(parse_url($imagePathRel, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
+                if ($finalImageUrl !== '') {
+                    $ext = strtolower(pathinfo(parse_url($finalImageUrl, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
                     $mime = 'image/jpeg';
                     if (in_array($ext, ['png'])) $mime = 'image/png';
                     elseif (in_array($ext, ['gif'])) $mime = 'image/gif';
                     elseif (in_array($ext, ['webp'])) $mime = 'image/webp';
                     $enclosure = $item->addChild('enclosure');
-                    $enclosure->addAttribute('url', $imagePathRel);
+                    $enclosure->addAttribute('url', $finalImageUrl);
                     $enclosure->addAttribute('type', $mime);
                 }
 
@@ -1664,7 +1668,7 @@ if (isset($_POST['action'])) {
                     'title' => $title,
                     'link' => $link,
                     'description' => $descPlain,
-                    'image' => $imagePathRel
+                    'image' => $finalImageUrl
                 ];
                 archive_post($item_data);
 
@@ -1680,7 +1684,7 @@ if (isset($_POST['action'])) {
                         $token = is_array($bot) ? $bot['token'] : (string)$bot;
                         $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
                         if ($token && $chat) {
-                            $resp = tg_send($token, $chat, $title, $descPlain, ($link ?? ''), ($imagePathRel ?? ''));
+                            $resp = tg_send($token, $chat, $title, $descPlain, ($link ?? ''), ($finalImageUrl ?? ''));
                             // Registrar como enviado
                             $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
                             if (!isset($sent['es'])) { $sent['es'] = []; }
