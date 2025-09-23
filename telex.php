@@ -1676,19 +1676,21 @@ if (isset($_POST['action'])) {
         $lang  = strtolower(trim($_POST['telegram_lang'] ?? ''));
         $token = trim($_POST['telegram_token'] ?? '');
         $chat  = trim($_POST['telegram_chatid'] ?? '');
-        $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
+
         if ($lang === '') {
-            $message = 'Selecciona un idioma para el bot de Telegram.'; $message_type = 'error';
+            $message = 'Selecciona un idioma para el bot de Telegram.';
+            $message_type = 'error';
         } else if ($token === '') {
-            $message = 'Introduce el token del bot de Telegram.'; $message_type = 'error';
+            $message = 'Introduce el token del bot de Telegram.';
+            $message_type = 'error';
         } else if ($chat === '') {
-            $message = 'Introduce el Chat ID del bot de Telegram.'; $message_type = 'error';
-            // Validación ligera de chat id: @canal o id numérico (p.ej. -100...)
-            if ($chat !== '' && !preg_match('/^@[A-Za-z0-9_]{3,}$/', $chat) && !preg_match('/^-?\d{5,}$/', $chat)) {
-                $message = 'Chat ID no válido. Usa @canal o un ID numérico.'; $message_type = 'error';
-                header("Location: telex.php?tab=" . urlencode($active_tab) . "&message=" . urlencode($message) . "&message_type=" . urlencode($message_type));
-                exit;
-            }
+            $message = 'Introduce el Chat ID del bot de Telegram.';
+            $message_type = 'error';
+        } else if (!preg_match('/^@[A-Za-z0-9_]{3,}$/', $chat) && !preg_match('/^-?\d{5,}$/', $chat)) {
+            $message = 'Chat ID no válido. Usa @canal o un ID numérico.';
+            $message_type = 'error';
+        } else {
+            $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
             // Un bot por idioma: sustituye si ya existe. Estructura: { token, chat_id }
             $bots[$lang] = [
                 'token'   => $token,
