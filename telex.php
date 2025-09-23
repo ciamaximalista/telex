@@ -1008,7 +1008,7 @@ if (isset($_POST['action'])) {
                 break;
         }
 
-        // Añadir entrada al RSS (sin Telegram)
+        // Añadir entrada al RSS y enviar a Telegram si procede
         if (!empty($finalTitle) && !empty($finalDescription)) {
             $descPlain = telex_description_plain($finalDescription, $finalTitle);
             if ($descPlain === '') {
@@ -1019,8 +1019,6 @@ if (isset($_POST['action'])) {
                 libxml_use_internal_errors(true);
                 if (file_exists($rss_file)) {
                     $rss = simplexml_load_file($rss_file);
-                    // DEBUG: Items in RSS after load: 
-                    error_log("DEBUG: Items in RSS after load: " . (isset($rss->channel->item) ? count($rss->channel->item) : 0));
                 } else {
                     $rss = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel></channel></rss>');
                     $rss->channel->addChild('title', 'Maximalismo — Noticias (ES)');
@@ -1055,7 +1053,6 @@ if (isset($_POST['action'])) {
                     } else {
                         $item->description = $descPlain;
                     }
-                    // Añadir content:encoded con HTML estructurado
                     $contentNode = $item->addChild('content:encoded', null, 'http://purl.org/rss/1.0/modules/content/');
                     if ($contentNode) {
                         $contentDom = dom_import_simplexml($contentNode);
@@ -1067,15 +1064,39 @@ if (isset($_POST['action'])) {
                     }
                     $item->addChild('pubDate', date(DATE_RSS));
 
-                    // Guardar rss.xml con formato
                     telex_save_rss_document($rss, $rss_file);
+
+                    // Envío automático a Telegram (ES) si está activado
+                    if ($_POST['action'] === 'approve' || $_POST['action'] === 'edit') {
+                        $auto_enabled = telex_flag_enabled(telex_config_get($config, ['telegram', 'auto_send', 'es'], true));
+                        if ($auto_enabled) {
+                            $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
+                            $bot  = $bots['es'] ?? null;
+                            if ($bot && (!is_array($bot) || (!empty($bot['token']) && !empty($bot['chat_id'])))) {
+                                $token = is_array($bot) ? $bot['token'] : (string)$bot;
+                                $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
+                                if ($token && $chat) {
+                                    $resp = tg_send($token, $chat, $finalTitle, $descPlain, $link, '');
+                                    $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
+                                    if (!isset($sent['es'])) { $sent['es'] = []; }
+                                    $key = $link ?: $guid;
+                                    if ($key !== '') { $sent['es'][$key] = true; }
+                                    @file_put_contents($telegram_sent_file, json_encode($sent, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                                    if (!$resp['ok'] && empty($message)) {
+                                        $message = 'Aprobado, pero error al enviar a Telegram: ' . htmlspecialchars($resp['error'] ?? '');
+                                        $message_type = 'error';
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Archive post
                     $item_data = [
                         'title' => $finalTitle,
                         'link' => $finalLink,
                         'description' => $descPlain,
-                        'image' => '' // No image info available here
+                        'image' => ''
                     ];
                     archive_post($item_data);
                 }
@@ -1686,51 +1707,7 @@ if (isset($_POST['action'])) {
         ;
     }
 
-    // Envío automático a Telegram al aprobar (ES) si está activado
-    if (isset($_POST['action']) && ($_POST['action'] === 'approve' || $_POST['action'] === 'edit')) {
-        // Nota: El bloque de aprobación anterior ya guardó en rss.xml
-        $auto_enabled = telex_flag_enabled(telex_config_get($config, ['telegram', 'auto_send', 'es'], true));
-        if ($auto_enabled) {
-            $bots = file_exists($telegram_tokens_file) ? (json_decode(@file_get_contents($telegram_tokens_file), true) ?: []) : [];
-            $bot  = $bots['es'] ?? null;
-            if ($bot && (!is_array($bot) || (!empty($bot['token']) && !empty($bot['chat_id'])))) {
-                $token = is_array($bot) ? $bot['token'] : (string)$bot;
-                $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
-                // Cargar último item añadido (suponemos el más reciente por pubDate o al final)
-                libxml_use_internal_errors(true);
-                $xml = @simplexml_load_file($rss_file);
-                if ($xml && isset($xml->channel->item)) {
-                    // Tomar el último item
-                    $items = iterator_to_array($xml->channel->item);
-                    $it = end($items);
-                    if ($it) {
-                        $title = (string)($it->title ?? '');
-                        $link  = (string)($it->link ?? '');
-                        $guid  = (string)($it->guid ?? '');
-                        $key   = $link !== '' ? $link : $guid;
-                        $desc_from_feed = isset($it->description) ? (string)$it->description : '';
-                        $desc_plain = telex_description_plain($desc_from_feed, $title);
-                        if ($desc_plain === '' && !empty($finalMessage)) {
-                            $desc_plain = telex_description_plain($finalMessage, $title);
-                        }
-                        $text = trim($title . "\n\n" . $desc_plain . "\n\n" . ($link ?? ''));
-                        if ($token && $chat && ($title !== '' || $desc_plain !== '' || ($link ?? '') !== '')) {
-                            $resp = tg_send($token, $chat, $title, $desc_plain, ($link ?? ''), '');
-                            // Registrar como enviado
-                            $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
-                            if (!isset($sent['es'])) { $sent['es'] = []; }
-                            if ($key !== '') { $sent['es'][$key] = true; }
-                            @file_put_contents($telegram_sent_file, json_encode($sent, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                            if (!$resp['ok'] && empty($message)) {
-                                $message = 'Aprobado, pero error al enviar a Telegram: ' . htmlspecialchars($resp['error'] ?? '');
-                                $message_type = 'error';
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+
 
     // Guardar configuración centralizada
     if (isset($_POST['save_config'])) {
