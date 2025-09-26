@@ -1,11 +1,6 @@
-/data
-/logs
-/node_modules
-/img
 /archive
-/.git
-.gitignore
+/data
+/img
+/logs
 rss.xml
 rss_en.xml
-communalia.xml
-
