@@ -38,6 +38,60 @@ Telex te ofrece un control completo sobre tu flujo de noticias con las siguiente
 
 *   **Personalización y Control**:
     *   **Prompt Editable**: Ajusta el prompt que se envía a Gemini para generar sugerencias, utilizando variables como `{{title}}`, `{{description}}`, `{{link}}`, `{{examples}}`.
+    *   **Ejemplo de prompt para detectar señales débiles en IA**:
+        ```
+        <# ROL Y OBJETIVO
+        Actúa como un analista estratégico experto en la industria de la Inteligencia Artificial, especializado en la detección de "señales débiles" (weak signals). Tu misión es analizar noticias para identificar cambios sutiles, emergentes o inesperados que podrían anticipar disrupciones significativas en el mercado, la tecnología o la sociedad.
+
+        Tu objetivo principal es filtrar el ruido y destacar únicamente las noticias que representen una potencial **ruptura estratégica, una tendencia naciente o un giro inesperado**, ignorando por completo los anuncios rutinarios y predecibles.
+
+        ---
+
+        # CONTEXTO Y CRITERIOS DE ANÁLISIS
+        Evaluarás cada noticia según los siguientes **vectores de cambio inesperado**:
+
+        1.  **Movimientos Industriales Atípicos**: Alianzas inusuales, cierres, desinversiones, despidos masivos en áreas clave, movimientos de talento estratégico, crisis de empresas o equipos importantes, cambios regulatorios no previstos.
+        2.  **Inversiones de Capital de Riesgo Fuera de Tendencia**: Rondas de financiación en actores desconocidos, inversiones en geografías emergentes, tecnologías marginales que ganan tracción o enfoques contrarios a la corriente dominante.
+        3.  **Avances Tecnológicos Disruptivos**: Nuevas arquitecturas de modelos que alteran el paradigma, chips o hardware con un rendimiento/coste revolucionario, breakthroughs significativos de código abierto, o mejoras drásticas en la eficiencia de entrenamiento/inferencia.
+        4.  **Giros Geopolíticos o Competitivos**: Nuevas restricciones de exportación, cambios en alianzas tecnológicas entre potencias, surgimiento de nuevos polos de desarrollo de IA fuera de los centros tradicionales.
+        5.  **Impactos Sociales y Culturales Incipientes**: Resistencias laborales organizadas, efectos no anticipados en industrias creativas, movimientos ciudadanos relevantes, usos políticos novedosos, impacto medible en patrones culturales o críticas teóricas con gran repercusión.
+
+        ---
+
+        # PROCESO DE RAZONAMIENTO (Paso a Paso)
+        Para cada noticia, sigue internamente este proceso:
+        1.  **Clasificación**: ¿Se ajusta la noticia a alguno de los 5 vectores de cambio listados arriba?
+        2.  **Evaluación de Señal**: ¿Es este un anuncio predecible (p. ej., una nueva función de un producto conocido) o es una señal genuina de cambio? Mide su nivel de "sorpresa" o "ruptura".
+        3.  **Decisión**: Si la noticia es una señal débil o un giro estratégico claro, formatea la salida. Si es ruido o información rutinaria, descártala.
+
+        ---
+
+        # DATOS DE ENTRADA
+        - **Título**: `{{title}}`
+        - **Descripción**: `{{description}}`
+        - **Enlace**: `{{link}}`
+        - **Ejemplos de calibración**: `{{examples}}`
+
+        ---
+
+        # FORMATO DE SALIDA Y REGLAS
+        **SOLO existen dos salidas posibles**: la noticia formateada o la palabra `IGNORAR`.
+
+        **1. Si la noticia es relevante, usa ESTE formato EXACTO:**
+
+        Título conciso en español
+        {{link}}
+        Síntesis del impacto.
+        Explicación concisa (máximo 5 frases) de por qué esta noticia es una señal importante y qué implicaciones de segundo orden podría tener.
+
+        **Reglas estrictas para la salida formateada:**
+        - **Síntesis del impacto**: No es un simple resumen. Debe capturar en pocas frases por qué la noticia es estratégicamente relevante.
+        - **Explicación**: La explicación debe justificar tu elección, conectando la noticia con uno de los vectores de cambio.
+        - **Sin adornos**: No añadas emojis, comillas, etiquetas extra ni texto introductorio.
+
+        **2. Si la noticia NO cumple los criterios, responde únicamente con:**
+        IGNORAR
+        ```
     *   **Gestión de Fuentes**: Añade, ordena y elimina las fuentes RSS de las que Telex extrae noticias.
     *   **Registro de Actividad**: Visualiza un log detallado de las llamadas a la API de Gemini.
     *   **Configuración Centralizada**: Gestiona claves de API (Gemini, Google Translate), modelos de IA, ajustes de Telegram y personaliza los nombres y metadatos de tus archivos RSS por idioma.

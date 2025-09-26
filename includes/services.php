@@ -3,6 +3,30 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
+if (!function_exists('telex_format_description_to_html')) {
+    function telex_format_description_to_html(string $text): string
+    {
+        // Normalize line endings to just \n
+        $text = str_replace(["\r\n", "\r"], "\n", trim($text));
+
+        // Split by two or more newlines to define paragraphs
+        $paragraphs = preg_split('~\n{2,}~', $text);
+
+        $html = '';
+        foreach ($paragraphs as $p) {
+            $p = trim($p);
+            if ($p === '') {
+                continue;
+            }
+            // Convert single newlines within a paragraph to <br />
+            $p_with_breaks = nl2br(htmlspecialchars($p, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), true);
+            $html .= '<p>' . $p_with_breaks . '</p>';
+        }
+
+        return $html;
+    }
+}
+
 if (!function_exists('telex_read_json')) {
     function telex_read_json(string $path, $default = null)
     {
