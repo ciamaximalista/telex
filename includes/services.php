@@ -415,6 +415,8 @@ if (!function_exists('telex_generate_suggestions')) {
                 '{{description}}' => $article['description'],
                 '{{link}}' => $article['link'],
             ]);
+            sleep(1);
+
             $response = telex_gemini_request($apiKey, $model, $prompt, [
                 'title' => $article['title'],
                 'link' => $article['link'],
@@ -646,5 +648,43 @@ if (!function_exists('telex_translate_feed')) {
         telex_write_json($change_cache_file, $changeCache);
 
         return [ 'ok' => true, 'message' => 'Feed traducido correctamente.' ];
+    }
+}
+
+if (!function_exists('telex_get_gemini_models')) {
+    function telex_get_gemini_models(string $apiKey): array
+    {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . rawurlencode($apiKey);
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $resp = curl_exec($ch);
+        $err  = curl_error($ch);
+        $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($err || $http < 200 || $http >= 300) {
+            return [];
+        }
+
+        $data = json_decode($resp ?: '', true);
+        if (!is_array($data) || !isset($data['models'])) {
+            return [];
+        }
+
+        $models = [];
+        foreach ($data['models'] as $model) {
+            if (isset($model['name']) && in_array('generateContent', $model['supportedGenerationMethods'] ?? []) && strpos($model['name'], 'gemini') !== false) {
+                $model_id = str_replace('models/', '', $model['name']);
+                $models[] = [
+                    'id' => $model_id,
+                    'name' => $model['displayName'] . ' (' . $model_id . ')'
+                ];
+            }
+        }
+        return $models;
     }
 }

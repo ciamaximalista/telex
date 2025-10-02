@@ -1705,13 +1705,44 @@ if (isset($_POST['action'])) {
     // Guardar configuración centralizada
     if (isset($_POST['save_config'])) {
         $geminiKey = trim((string)($_POST['gemini_api_key'] ?? ''));
-        $geminiModel = trim((string)($_POST['gemini_model'] ?? 'gemini-1.5-flash-latest'));
+        $geminiModel = trim((string)($_POST['gemini_model'] ?? ''));
+        if ($geminiModel === '') {
+            $gemini_api_key = telex_config_get($config, ['apis', 'gemini', 'api_key'], '');
+            $available_models = [];
+            if ($gemini_api_key) {
+                $available_models = telex_get_gemini_models($gemini_api_key);
+            }
+            if (!empty($available_models)) {
+                $default_model = 'gemini-flash-latest';
+                $flash_models = array_filter($available_models, function($model) {
+                    return strpos($model['id'], 'flash') !== false || strpos($model['id'], 'lite') !== false;
+                });
+                if (!empty($flash_models)) {
+                    $latest_flash_models = array_filter($flash_models, function($model) {
+                        return strpos($model['id'], 'latest') !== false;
+                    });
+                    if (!empty($latest_flash_models)) {
+                        $default_model = reset($latest_flash_models)['id'];
+                    } else {
+                        usort($flash_models, function($a, $b) {
+                            return strcmp($b['id'], $a['id']);
+                        });
+                        $default_model = reset($flash_models)['id'];
+                    }
+                } else {
+                    $default_model = reset($available_models)['id'];
+                }
+                $geminiModel = $default_model;
+            } else {
+                $geminiModel = 'gemini-flash-latest';
+            }
+        }
         $translateKey = trim((string)($_POST['google_translate_api_key'] ?? ''));
         $autoSendEs = isset($_POST['telegram_auto_send_es']);
         $translatorLang = strtolower(trim((string)($_POST['translator_lang'] ?? '')));
 
         telex_config_set($config, ['apis', 'gemini', 'api_key'], $geminiKey);
-        telex_config_set($config, ['apis', 'gemini', 'model'], $geminiModel !== '' ? $geminiModel : 'gemini-1.5-flash-latest');
+        telex_config_set($config, ['apis', 'gemini', 'model'], $geminiModel);
         telex_config_set($config, ['apis', 'google_translate', 'api_key'], $translateKey);
         telex_config_set($config, ['telegram', 'auto_send', 'es'], $autoSendEs);
 
@@ -2029,7 +2060,7 @@ if (isset($_POST['action'])) {
 
     after_post_redirect:
     
-    header("Location: telex.php?tab=" . urlencode($active_tab) . "&message=" . urlencode($message) . "&message_type=" . urlencode($message_type));
+    header("Location: telex.php?tab=" . urlencode($active_tab) . "&message=" . urlencode($message) . "&message_type=" . urlencode($message_type) . "&v=1.0.1");
     exit;
 }
 
@@ -2623,15 +2654,49 @@ if (!empty($telegram_bots)) {
             </div>
             <div class="form-group">
                 <label>Gemini Model</label>
-                <input type="text" id="gemini_model" name="gemini_model" value="<?php echo htmlspecialchars(telex_config_get($config, ['apis','gemini','model'], 'gemini-1.5-flash-latest')); ?>" placeholder="gemini-1.5-flash-latest">
+                <?php
+                $gemini_api_key = telex_config_get($config, ['apis', 'gemini', 'api_key'], '');
+                $available_models = [];
+                if ($gemini_api_key) {
+                    $available_models = telex_get_gemini_models($gemini_api_key);
+                }
+                $current_model = telex_config_get($config, ['apis', 'gemini', 'model'], 'gemini-flash-latest');
+
+                if (empty($available_models)) {
+                    $available_models = [['id' => 'gemini-flash-latest', 'name' => 'gemini-flash-latest'], ['id' => 'gemini-pro-latest', 'name' => 'gemini-pro-latest']];
+                }
+
+                $default_model = $current_model;
+                $model_ids = array_column($available_models, 'id');
+                if (!in_array($default_model, $model_ids)) {
+                    $flash_models = array_filter($available_models, function($model) {
+                        return strpos($model['id'], 'flash') !== false || strpos($model['id'], 'lite') !== false;
+                    });
+                    if (!empty($flash_models)) {
+                        $latest_flash_models = array_filter($flash_models, function($model) {
+                            return strpos($model['id'], 'latest') !== false;
+                        });
+                        if (!empty($latest_flash_models)) {
+                            $default_model = reset($latest_flash_models)['id'];
+                        } else {
+                            usort($flash_models, function($a, $b) {
+                                return strcmp($b['id'], $a['id']);
+                            });
+                            $default_model = reset($flash_models)['id'];
+                        }
+                    } elseif (!empty($available_models)) {
+                        $default_model = reset($available_models)['id'];
+                    }
+                }
+                ?>
+                <input type="text" id="gemini_model" name="gemini_model" value="<?php echo htmlspecialchars($current_model); ?>" placeholder="<?php echo htmlspecialchars($default_model); ?>">
                 <div style="margin-top: .5rem;">
-                    <small>Modelos sugeridos:</small>
+                    <small>Modelos disponibles:</small>
                     <select onchange="document.getElementById('gemini_model').value=this.value" style="margin-left:.5rem;">
                         <option value="">— elegir —</option>
-                        <option>gemini-1.5-flash-latest</option>
-                        <option>gemini-1.5-pro-latest</option>
-                        <option>gemini-1.5-flash</option>
-                        <option>gemini-1.5-pro</option>
+                        <?php foreach ($available_models as $model): ?>
+                            <option value="<?php echo htmlspecialchars($model['id']); ?>" <?php echo ($model['id'] === $current_model) ? 'selected' : ''; ?>><?php echo htmlspecialchars($model['name']); ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
             </div>
