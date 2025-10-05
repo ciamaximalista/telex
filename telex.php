@@ -1101,7 +1101,7 @@ if (isset($_POST['action'])) {
                             $token = is_array($bot) ? $bot['token'] : (string)$bot;
                             $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
                             if ($token && $chat) {
-                                $resp = tg_send($token, $chat, $finalTitle, $descPlain, $link, '');
+                                $resp = tg_send($token, $chat, $finalTitle, $descPlain, $finalLink, '');
                                 $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
                                 if (!isset($sent['es'])) { $sent['es'] = []; }
                                 $key = $link ?: $guid;
