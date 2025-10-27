@@ -148,16 +148,18 @@ $telegram_tokens_file = $data_dir . '/telegram_tokens.json';
 $telegram_sent_file   = $data_dir . '/telegram_sent.json';
 
 $google_translate_langs = [
-    'af','ar','az','ay','bg','bn','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fil','fr','ga','gl','gn','gu','ha','he','hi','hr','hu','id','is','it','ja','ka','kk','kn','ko','lt','lv','ml','mr','ms','ne','nl','no','pa','pl','pt','qu','rm','ro','ru','si','sk','sl','sq','sw','sv','ta','te','th','tl','tr','ug','uk','ur','vi','yo','zh','zh-cn','zh-tw','zu','xh','st'
+    'af','ar','az','ay','bg','bn','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fil','fr','ga','gl','gn','gu','ha','he','hi','hr','hu','id','is','it','ja','ka','kk','kn','ko','lt','lv','ml','mr','ms','mt','ne','nl','no','pa','pl','pt','qu','rm','ro','ru','si','sk','sl','sq','sw','sv','ta','te','th','tl','tr','ug','uk','ur','vi','yo','zh','zh-cn','zh-tw','zu','xh','st'
 ];
 $google_translate_langs = array_values(array_unique(array_map('strtolower', $google_translate_langs)));
 $google_translate_langs = array_values($google_translate_langs);
 sort($google_translate_langs);
 $google_translate_langs_set = array_fill_keys($google_translate_langs, true);
+$eu_member_countries = ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'];
+$segib_member_countries = ['AD','AR','BO','BR','CL','CO','CR','CU','EC','SV','ES','GT','HN','MX','NI','PA','PY','PE','PT','DO','UY','VE'];
 $country_language_overrides = [
     'ES' => ['es', 'ca', 'gl', 'eu'],
     'US' => ['en', 'es'],
-    'CA' => ['en', 'fr'],
+    'CA' => ['en', 'fr', 'es'],
     'MX' => ['es', 'en'],
     'GT' => ['es', 'qu'],
     'PE' => ['es', 'qu', 'ay'],
@@ -170,11 +172,39 @@ $country_language_overrides = [
     'CL' => ['es', 'en'],
     'VE' => ['es', 'en'],
     'CO' => ['es', 'en'],
+    'AD' => ['ca', 'es', 'fr'],
+    'AT' => ['de'],
     'BE' => ['fr', 'nl', 'de'],
-    'CH' => ['de', 'fr', 'it', 'rm'],
-    'GB' => ['en', 'cy', 'ga'],
+    'BG' => ['bg'],
+    'CR' => ['es', 'en'],
+    'CU' => ['es', 'en'],
+    'CY' => ['el', 'tr'],
+    'CZ' => ['cs'],
+    'DK' => ['da'],
+    'DO' => ['es', 'en'],
+    'EE' => ['et'],
+    'FI' => ['fi', 'sv'],
+    'FR' => ['fr'],
+    'DE' => ['de'],
+    'GR' => ['el'],
+    'HN' => ['es', 'en'],
+    'HR' => ['hr'],
+    'HU' => ['hu'],
     'IE' => ['en', 'ga'],
+    'IT' => ['it'],
+    'LV' => ['lv'],
+    'LT' => ['lt'],
+    'LU' => ['fr', 'de'],
+    'MT' => ['mt', 'en'],
+    'NI' => ['es', 'en'],
+    'NL' => ['nl'],
+    'PA' => ['es', 'en'],
+    'PL' => ['pl'],
     'PT' => ['pt', 'es'],
+    'RO' => ['ro'],
+    'SE' => ['sv'],
+    'SK' => ['sk'],
+    'SI' => ['sl'],
     'MA' => ['ar', 'fr', 'es'],
     'DZ' => ['ar', 'fr'],
     'ZA' => ['en', 'af', 'zu', 'xh', 'st'],
@@ -270,11 +300,90 @@ foreach ($country_language_dataset as $entry) {
         'name' => $nameEs,
     ];
 }
+$eu_languages_union = [];
+foreach ($eu_member_countries as $memberCode) {
+    if (!isset($country_language_index[$memberCode])) {
+        continue;
+    }
+    foreach ($country_language_index[$memberCode]['languages'] as $langInfo) {
+        $langCode = $langInfo['code'];
+        $eu_languages_union[$langCode] = lang_name_es($langCode);
+    }
+}
+if (!empty($eu_languages_union)) {
+    $eu_languages_list = [];
+    foreach ($eu_languages_union as $langCode => $langName) {
+        $eu_languages_list[] = [
+            'code' => $langCode,
+            'name' => $langName,
+        ];
+    }
+    usort($eu_languages_list, function ($a, $b) use ($strtolower_fn) {
+        $aName = $strtolower_fn($a['name']);
+        $bName = $strtolower_fn($b['name']);
+        return $aName <=> $bName;
+    });
+    $country_language_index['EU'] = [
+        'name' => 'Unión Europea',
+        'languages' => $eu_languages_list,
+    ];
+}
+$segib_languages_union = [];
+foreach ($segib_member_countries as $memberCode) {
+    if (!isset($country_language_index[$memberCode])) {
+        continue;
+    }
+    foreach ($country_language_index[$memberCode]['languages'] as $langInfo) {
+        $langCode = $langInfo['code'];
+        $segib_languages_union[$langCode] = lang_name_es($langCode);
+    }
+}
+if (!empty($segib_languages_union)) {
+    $segib_languages_list = [];
+    foreach ($segib_languages_union as $langCode => $langName) {
+        $segib_languages_list[] = [
+            'code' => $langCode,
+            'name' => $langName,
+        ];
+    }
+    usort($segib_languages_list, function ($a, $b) use ($strtolower_fn) {
+        $aName = $strtolower_fn($a['name']);
+        $bName = $strtolower_fn($b['name']);
+        return $aName <=> $bName;
+    });
+    $country_language_index['IB'] = [
+        'name' => 'Iberoamérica (SEGIB)',
+        'languages' => $segib_languages_list,
+    ];
+}
+$priority_codes = ['EU', 'IB'];
 usort($countries_for_picker, function ($a, $b) use ($strtolower_fn) {
     $aName = $strtolower_fn($a['name']);
     $bName = $strtolower_fn($b['name']);
     return $aName <=> $bName;
 });
+$prioritized_entries = [];
+foreach ($priority_codes as $pc) {
+    if (isset($country_language_index[$pc])) {
+        $prioritized_entries[$pc] = [
+            'code' => $pc,
+            'name' => $country_language_index[$pc]['name'],
+        ];
+    }
+}
+$countries_reordered = [];
+foreach ($priority_codes as $pc) {
+    if (isset($prioritized_entries[$pc])) {
+        $countries_reordered[] = $prioritized_entries[$pc];
+    }
+}
+foreach ($countries_for_picker as $entry) {
+    if (in_array($entry['code'], $priority_codes, true)) {
+        continue;
+    }
+    $countries_reordered[] = $entry;
+}
+$countries_for_picker = $countries_reordered;
 $country_language_payload = $country_language_index;
 $country_search_selected_country = '';
 $country_search_selected_country_name = '';
@@ -1027,7 +1136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $translate_flag = !empty($_POST['translate_term']);
         $state = [
             'country_code' => $selected_country_code,
-            'country_name' => $country_language_index[$selected_country_code]['name'] ?? '',
+            'country_name' => $country_language_index[$selected_country_code]['name'] ?? ($selected_country_code === 'EU' ? 'Unión Europea' : ($selected_country_code === 'IB' ? 'Iberoamérica (SEGIB)' : '')),
             'languages' => $selected_languages,
             'term' => $search_term_input,
             'translate' => $translate_flag,
@@ -1037,28 +1146,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $warnings = [];
         $lookups = [];
         $added_sources = [];
-        if ($selected_country_code === '' || !isset($country_language_index[$selected_country_code])) {
+        $countries_to_process = [];
+        $languages_by_country = [];
+        $is_eu = ($selected_country_code === 'EU');
+        $is_segib = ($selected_country_code === 'IB');
+
+        if ($selected_country_code === '' || (!$is_eu && !$is_segib && !isset($country_language_index[$selected_country_code]))) {
             $errors[] = 'Selecciona un país válido.';
         }
         if ($search_term_input === '') {
             $errors[] = 'Introduce un término de búsqueda en español.';
         }
-        $valid_langs = [];
-        if ($selected_country_code !== '' && isset($country_language_index[$selected_country_code])) {
-            foreach ($country_language_index[$selected_country_code]['languages'] as $langInfo) {
-                $valid_langs[$langInfo['code']] = true;
+
+        if ($is_eu) {
+            foreach ($eu_member_countries as $memberCode) {
+                if (!isset($country_language_index[$memberCode])) {
+                    continue;
+                }
+                $langEntries = $country_language_index[$memberCode]['languages'] ?? [];
+                if (empty($langEntries)) {
+                    continue;
+                }
+                $langCodes = array_values(array_unique(array_map(function ($langInfo) {
+                    return strtolower((string)$langInfo['code']);
+                }, $langEntries)));
+                if (empty($langCodes)) {
+                    continue;
+                }
+                $countries_to_process[] = $memberCode;
+                $languages_by_country[$memberCode] = $langCodes;
             }
-        }
-        if (empty($selected_languages)) {
-            $errors[] = 'Selecciona al menos un idioma.';
-        } else {
-            foreach ($selected_languages as $code) {
-                if (!isset($valid_langs[$code])) {
-                    $errors[] = 'Selecciona únicamente idiomas disponibles para el país elegido.';
-                    break;
+            if (empty($countries_to_process)) {
+                $errors[] = 'No se encontraron países miembros de la Unión Europea con idiomas configurados.';
+            }
+            $union_langs = [];
+            foreach ($languages_by_country as $codes) {
+                foreach ($codes as $code) {
+                    $union_langs[$code] = true;
                 }
             }
+            $union_codes = array_keys($union_langs);
+            sort($union_codes);
+            $state['languages'] = $union_codes;
+            $state['country_name'] = 'Unión Europea';
+        } elseif ($is_segib) {
+            foreach ($segib_member_countries as $memberCode) {
+                if (!isset($country_language_index[$memberCode])) {
+                    continue;
+                }
+                $langEntries = $country_language_index[$memberCode]['languages'] ?? [];
+                if (empty($langEntries)) {
+                    continue;
+                }
+                $langCodes = array_values(array_unique(array_map(function ($langInfo) {
+                    return strtolower((string)$langInfo['code']);
+                }, $langEntries)));
+                if (empty($langCodes)) {
+                    continue;
+                }
+                $countries_to_process[] = $memberCode;
+                $languages_by_country[$memberCode] = $langCodes;
+            }
+            if (empty($countries_to_process)) {
+                $errors[] = 'No se encontraron países miembros de la SEGIB con idiomas configurados.';
+            }
+            $union_langs = [];
+            foreach ($languages_by_country as $codes) {
+                foreach ($codes as $code) {
+                    $union_langs[$code] = true;
+                }
+            }
+            $union_codes = array_keys($union_langs);
+            sort($union_codes);
+            $state['languages'] = $union_codes;
+            $state['country_name'] = 'Iberoamérica (SEGIB)';
+        } else {
+            $valid_langs = [];
+            if (isset($country_language_index[$selected_country_code])) {
+                foreach ($country_language_index[$selected_country_code]['languages'] as $langInfo) {
+                    $valid_langs[$langInfo['code']] = true;
+                }
+            }
+            if (empty($selected_languages)) {
+                $errors[] = 'Selecciona al menos un idioma.';
+            } else {
+                foreach ($selected_languages as $code) {
+                    if (!isset($valid_langs[$code])) {
+                        $errors[] = 'Selecciona únicamente idiomas disponibles para el país elegido.';
+                        break;
+                    }
+                }
+            }
+            if (empty($errors)) {
+                $countries_to_process[] = $selected_country_code;
+                $languages_by_country[$selected_country_code] = array_values(array_unique($selected_languages));
+                $state['languages'] = array_values(array_unique($selected_languages));
+            }
         }
+
         if (empty($errors)) {
             $translate_api_key = telex_config_get($config, ['apis', 'google_translate', 'api_key'], '');
             $current_sources = telex_read_json($sources_file, []);
@@ -1071,94 +1256,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $existing_sources_set[telex_normalize_link($src['url'])] = true;
                 }
             }
-            foreach ($selected_languages as $code) {
-                $final_term = $search_term_input;
-                if ($translate_flag && $code !== 'es') {
-                    if ($translate_api_key === '') {
-                        $warnings[] = 'Falta la clave de Google Translate, se usa el término original para ' . lang_name_es($code) . '.';
-                    } else {
-                        $translated = telex_google_translate([$search_term_input], $translate_api_key, $code, 'es', 'text');
-                        if (!empty($translated) && isset($translated[0]) && trim((string)$translated[0]) !== '') {
-                            $final_term = trim((string)$translated[0]);
+            foreach ($countries_to_process as $country_code_current) {
+                $language_codes_current = $languages_by_country[$country_code_current] ?? [];
+                if (empty($language_codes_current)) {
+                    continue;
+                }
+                $country_name_current = $country_language_index[$country_code_current]['name'] ?? $country_code_current;
+                foreach ($language_codes_current as $code) {
+                    $final_term = $search_term_input;
+                    if ($translate_flag && $code !== 'es') {
+                        if ($translate_api_key === '') {
+                            $warnings[] = 'Falta la clave de Google Translate, se usa el término original para ' . lang_name_es($code) . '.';
                         } else {
-                            $warnings[] = 'No se pudo traducir el término al ' . lang_name_es($code) . '.';
+                            $translated = telex_google_translate([$search_term_input], $translate_api_key, $code, 'es', 'text');
+                            if (!empty($translated) && isset($translated[0]) && trim((string)$translated[0]) !== '') {
+                                $final_term = trim((string)$translated[0]);
+                            } else {
+                                $warnings[] = 'No se pudo traducir el término al ' . lang_name_es($code) . ' en ' . $country_name_current . '.';
+                            }
+                        }
+                    }
+                    $state['results'][] = [
+                        'country_code' => $country_code_current,
+                        'country_name' => $country_name_current,
+                        'language_code' => $code,
+                        'language_name' => lang_name_es($code),
+                        'term' => $final_term,
+                    ];
+                    $encoded_term = rawurlencode($final_term);
+                    $google_url = 'https://news.google.com/rss/search?q=' . $encoded_term . '+when:30d&hl=' . rawurlencode($code) . '&gl=' . rawurlencode($country_code_current) . '&ceid=' . rawurlencode($country_code_current . ':' . $code);
+                    $google_info = null;
+                    $google_content = telex_http_get($google_url, 10, $google_info);
+                    $google_exists = is_string($google_content) && trim($google_content) !== '';
+                    $google_effective = $google_info['url'] ?? $google_url;
+                    $google_effective_norm = telex_normalize_link($google_effective);
+                    $google_expected_norm = telex_normalize_link($google_url);
+                    $google_status = $google_exists ? 'ok' : 'error';
+                    $google_message = $google_exists ? 'Encontrado' : 'No disponible';
+                    if ($google_exists && $google_effective_norm !== '' && $google_expected_norm !== '' && $google_effective_norm !== $google_expected_norm) {
+                        $google_status = 'redirect';
+                        $google_message = 'Redirigido a ' . $google_effective;
+                        $final_query = [];
+                        parse_str((string)parse_url($google_effective, PHP_URL_QUERY), $final_query);
+                        $final_ceid = strtolower((string)($final_query['ceid'] ?? ''));
+                        $expected_ceid = strtolower($country_code_current . ':' . $code);
+                        if ($final_ceid !== '' && $final_ceid !== $expected_ceid) {
+                            $warnings[] = 'Google News redirige la búsqueda de ' . $country_code_current . ':' . $code . ' a ' . strtoupper($final_ceid) . '.';
+                        } else {
+                            $warnings[] = 'Google News redirige la búsqueda de ' . $country_code_current . ':' . $code . ' a otra URL.';
+                        }
+                    }
+                    $lookups[] = [
+                        'engine' => 'GoogleNews',
+                        'url' => $google_url,
+                        'status' => $google_status,
+                        'message' => $google_message,
+                        'country_code' => $country_code_current,
+                        'language_code' => $code,
+                    ];
+                    if ($google_exists) {
+                        $google_source_url = $google_effective_norm !== '' ? $google_effective : $google_url;
+                        $normalized_url = $google_effective_norm !== '' ? $google_effective_norm : $google_expected_norm;
+                        if ($normalized_url !== '' && !isset($existing_sources_set[$normalized_url])) {
+                            $title = 'GoogleNews ' . $final_term . ' ' . $country_code_current . ':' . $code;
+                            $current_sources[] = [ 'name' => $title, 'url' => $google_source_url ];
+                            $existing_sources_set[$normalized_url] = true;
+                            $added_sources[] = [
+                                'title' => $title,
+                                'url' => $google_source_url,
+                                'engine' => 'GoogleNews',
+                                'country_code' => $country_code_current,
+                                'language_code' => $code,
+                            ];
+                        }
+                    }
+
+                    $bing_url = 'https://www.bing.com/news/search?q=' . $encoded_term . '&qft=interval%30d%228%22+sortbydate%3d%221%22&form=PTFTNR&setlang=' . rawurlencode($code) . '&cc=' . rawurlencode(strtolower($country_code_current)) . '&format=rss';
+                    $bing_info = null;
+                    $bing_content = telex_http_get($bing_url, 10, $bing_info);
+                    $bing_exists = is_string($bing_content) && trim($bing_content) !== '';
+                    $bing_effective = $bing_info['url'] ?? $bing_url;
+                    $bing_effective_norm = telex_normalize_link($bing_effective);
+                    $bing_status = $bing_exists ? 'ok' : 'error';
+                    $bing_message = $bing_exists ? 'Encontrado' : 'No disponible';
+                    if ($bing_exists && $bing_effective_norm !== '' && $bing_effective_norm !== telex_normalize_link($bing_url)) {
+                        $bing_status = 'redirect';
+                        $bing_message = 'Redirigido a ' . $bing_effective;
+                    }
+                    $lookups[] = [
+                        'engine' => 'Bing',
+                        'url' => $bing_url,
+                        'status' => $bing_status,
+                        'message' => $bing_message,
+                        'country_code' => $country_code_current,
+                        'language_code' => $code,
+                    ];
+                    if ($bing_exists) {
+                        $bing_source_url = $bing_effective_norm !== '' ? $bing_effective : $bing_url;
+                        $normalized_bing = $bing_effective_norm !== '' ? $bing_effective_norm : telex_normalize_link($bing_url);
+                        if ($normalized_bing !== '' && !isset($existing_sources_set[$normalized_bing])) {
+                            $bing_title = 'Bing ' . $country_code_current . ':' . $code;
+                            $current_sources[] = [ 'name' => $bing_title, 'url' => $bing_source_url ];
+                            $existing_sources_set[$normalized_bing] = true;
+                            $added_sources[] = [
+                                'title' => $bing_title,
+                                'url' => $bing_source_url,
+                                'engine' => 'Bing',
+                                'country_code' => $country_code_current,
+                                'language_code' => $code,
+                            ];
                         }
                     }
                 }
-                $state['results'][] = [
-                    'language_code' => $code,
-                    'language_name' => lang_name_es($code),
-                    'term' => $final_term,
-                ];
-                $encoded_term = rawurlencode($final_term);
-                $google_url = 'https://news.google.com/rss/search?q=' . $encoded_term . '+when:30d&hl=' . rawurlencode($code) . '&gl=' . rawurlencode($selected_country_code) . '&ceid=' . rawurlencode($selected_country_code . ':' . $code);
-                $google_info = null;
-                $google_content = telex_http_get($google_url, 10, $google_info);
-                $google_exists = is_string($google_content) && trim($google_content) !== '';
-                $google_effective = $google_info['url'] ?? $google_url;
-                $google_effective_norm = telex_normalize_link($google_effective);
-                $google_expected_norm = telex_normalize_link($google_url);
-                $google_status = $google_exists ? 'ok' : 'error';
-                $google_message = $google_exists ? 'Encontrado' : 'No disponible';
-                if ($google_exists && $google_effective_norm !== '' && $google_expected_norm !== '' && $google_effective_norm !== $google_expected_norm) {
-                    $google_status = 'redirect';
-                    $google_message = 'Redirigido a ' . $google_effective;
-                    $final_query = [];
-                    parse_str((string)parse_url($google_effective, PHP_URL_QUERY), $final_query);
-                    $final_ceid = strtolower((string)($final_query['ceid'] ?? ''));
-                    $expected_ceid = strtolower($selected_country_code . ':' . $code);
-                    if ($final_ceid !== '' && $final_ceid !== $expected_ceid) {
-                        $warnings[] = 'Google News redirige la búsqueda de ' . $selected_country_code . ':' . $code . ' a ' . strtoupper($final_ceid) . '.';
-                    } else {
-                        $warnings[] = 'Google News redirige la búsqueda de ' . $selected_country_code . ':' . $code . ' a otra URL.';
-                    }
-                }
-                $lookups[] = [
-                    'engine' => 'GoogleNews',
-                    'url' => $google_url,
-                    'status' => $google_status,
-                    'message' => $google_message,
-                ];
-                if ($google_exists) {
-                    $google_source_url = $google_effective_norm !== '' ? $google_effective : $google_url;
-                    $normalized_url = $google_effective_norm !== '' ? $google_effective_norm : $google_expected_norm;
-                    if ($normalized_url !== '' && !isset($existing_sources_set[$normalized_url])) {
-                        $title = 'GoogleNews ' . $final_term . ' ' . $selected_country_code . ':' . $code;
-                        $current_sources[] = [ 'name' => $title, 'url' => $google_source_url ];
-                        $existing_sources_set[$normalized_url] = true;
-                        $added_sources[] = [ 'title' => $title, 'url' => $google_source_url ];
-                    }
-                }
-
-                $bing_url = 'https://www.bing.com/news/search?q=' . $encoded_term . '&qft=interval%30d%228%22+sortbydate%3d%221%22&form=PTFTNR&setlang=' . rawurlencode($code) . '&cc=' . rawurlencode(strtolower($selected_country_code)) . '&format=rss';
-                $bing_info = null;
-                $bing_content = telex_http_get($bing_url, 10, $bing_info);
-                $bing_exists = is_string($bing_content) && trim($bing_content) !== '';
-                $bing_effective = $bing_info['url'] ?? $bing_url;
-                $bing_effective_norm = telex_normalize_link($bing_effective);
-                $bing_status = $bing_exists ? 'ok' : 'error';
-                $bing_message = $bing_exists ? 'Encontrado' : 'No disponible';
-                if ($bing_exists && $bing_effective_norm !== '' && $bing_effective_norm !== telex_normalize_link($bing_url)) {
-                    $bing_status = 'redirect';
-                    $bing_message = 'Redirigido a ' . $bing_effective;
-                }
-                $lookups[] = [
-                    'engine' => 'Bing',
-                    'url' => $bing_url,
-                    'status' => $bing_status,
-                    'message' => $bing_message,
-                ];
-                if ($bing_exists) {
-                    $bing_source_url = $bing_effective_norm !== '' ? $bing_effective : $bing_url;
-                    $normalized_bing = $bing_effective_norm !== '' ? $bing_effective_norm : telex_normalize_link($bing_url);
-                    if ($normalized_bing !== '' && !isset($existing_sources_set[$normalized_bing])) {
-                        $bing_title = 'Bing ' . $selected_country_code . ':' . $code;
-                        $current_sources[] = [ 'name' => $bing_title, 'url' => $bing_source_url ];
-                        $existing_sources_set[$normalized_bing] = true;
-                        $added_sources[] = [ 'title' => $bing_title, 'url' => $bing_source_url ];
-                    }
-                }
             }
+
             if (!empty($warnings)) {
                 $state['warnings'] = $warnings;
                 $message = 'Términos generados con avisos.';
@@ -2460,7 +2671,7 @@ if (isset($_SESSION['country_search_state'])) {
     $state = $_SESSION['country_search_state'];
     unset($_SESSION['country_search_state']);
     $country_search_selected_country = $state['country_code'] ?? '';
-    $country_search_selected_country_name = $state['country_name'] ?? ($country_language_index[$country_search_selected_country]['name'] ?? '');
+    $country_search_selected_country_name = $state['country_name'] ?? ($country_language_index[$country_search_selected_country]['name'] ?? ($country_search_selected_country === 'EU' ? 'Unión Europea' : ($country_search_selected_country === 'IB' ? 'Iberoamérica (SEGIB)' : '')));
     $country_search_selected_languages = $state['languages'] ?? [];
     $country_search_term_value = $state['term'] ?? '';
     $country_search_translate_checked = !empty($state['translate']);
@@ -3283,8 +3494,13 @@ if (!empty($telegram_bots)) {
                     <?php if (!empty($country_search_results)): ?>
                         <h4>Resultados</h4>
                         <ul>
-                            <?php foreach ($country_search_results as $result): ?>
-                                <li><strong><?php echo htmlspecialchars($result['language_name']); ?> (<?php echo htmlspecialchars($result['language_code']); ?>):</strong> <?php echo htmlspecialchars($result['term']); ?></li>
+                            <?php foreach ($country_search_results as $result):
+                                $resultCountry = $result['country_code'] ?? ($state['country_code'] ?? '');
+                                $resultCountryName = $result['country_name'] ?? ($country_language_index[$resultCountry]['name'] ?? $resultCountry);
+                                $resultLang = $result['language_code'] ?? '';
+                                $resultLangName = $result['language_name'] ?? lang_name_es($resultLang);
+                            ?>
+                                <li><strong><?php echo htmlspecialchars($resultCountryName); ?> (<?php echo htmlspecialchars($resultCountry); ?> · <?php echo htmlspecialchars($resultLang); ?>)</strong>: <?php echo htmlspecialchars($result['term']); ?></li>
                             <?php endforeach; ?>
                         </ul>
                     <?php endif; ?>
@@ -3294,8 +3510,11 @@ if (!empty($telegram_bots)) {
                             <?php foreach ($country_search_lookups as $lookup):
                                 $statusClass = htmlspecialchars($lookup['status'] ?? 'info');
                                 $messageText = $lookup['message'] ?? (($lookup['status'] ?? '') === 'ok' ? 'Encontrado' : ((($lookup['status'] ?? '') === 'error') ? 'No disponible' : 'Redirigido'));
+                                $lookupCountry = $lookup['country_code'] ?? ($state['country_code'] ?? '');
+                                $lookupLang = $lookup['language_code'] ?? '';
+                                $lookupEngine = $lookup['engine'] ?? 'Fuente';
                             ?>
-                                <li class="<?php echo $statusClass; ?>">Buscando <code><?php echo htmlspecialchars($lookup['url']); ?></code> … <?php echo htmlspecialchars($messageText); ?></li>
+                                <li class="<?php echo $statusClass; ?>">Buscando [<?php echo htmlspecialchars($lookupCountry); ?>:<?php echo htmlspecialchars($lookupLang); ?>] <?php echo htmlspecialchars($lookupEngine); ?> <code><?php echo htmlspecialchars($lookup['url']); ?></code> … <?php echo htmlspecialchars($messageText); ?></li>
                             <?php endforeach; ?>
                         </ul>
                     <?php endif; ?>
@@ -3303,7 +3522,17 @@ if (!empty($telegram_bots)) {
                         <h4>Fuentes añadidas</h4>
                         <ul class="country-search-added">
                             <?php foreach ($country_search_added_sources as $added): ?>
-                                <li><strong><?php echo htmlspecialchars($added['title']); ?></strong><br><code><?php echo htmlspecialchars($added['url']); ?></code></li>
+                                <?php if (is_array($added)):
+                                    $addedEngine = $added['engine'] ?? '';
+                                    $addedCountry = $added['country_code'] ?? '';
+                                    $addedLang = $added['language_code'] ?? '';
+                                    $addedTitle = $added['title'] ?? ($addedEngine . ' ' . $addedCountry . ':' . $addedLang);
+                                    $addedUrl = $added['url'] ?? '';
+                                ?>
+                                    <li><strong><?php echo htmlspecialchars($addedEngine); ?> <?php echo htmlspecialchars(trim($addedCountry . ':' . $addedLang, ':')); ?></strong><br><?php echo htmlspecialchars($addedTitle); ?><br><code><?php echo htmlspecialchars($addedUrl); ?></code></li>
+                                <?php else: ?>
+                                    <li><?php echo htmlspecialchars($added); ?></li>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         </ul>
                     <?php endif; ?>
