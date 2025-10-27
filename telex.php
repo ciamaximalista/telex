@@ -79,6 +79,8 @@ if (!is_dir($img_dir)) { @mkdir($img_dir, 0775, true); }
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/services.php';
+require_once __DIR__ . '/includes/iso_639_3_to_1.php';
+require_once __DIR__ . '/includes/language_data.php';
 
 $sugerencias_file     = $data_dir . '/sugerencias_pendientes.json';
 $prompt_file          = $data_dir . '/prompt.txt';
@@ -135,6 +137,8 @@ $cache_titles_file    = $data_dir . '/.sent_titles_cache.json';
 $titlekeys_file       = $data_dir . '/.sent_titlekeys_cache.json';
 $gemini_log_file      = $data_dir . '/gemini_log.jsonl'; // <-- 1. RUTA DEL NUEVO LOG
 $analysis_prompt_file = $data_dir . '/analysis_prompt.txt';
+$processed_links_file = $data_dir . '/processed_links.json';
+$processed_link_cache_ttl = 30 * 86400; // 30 días en segundos
 // Caches del traductor
 $rss_change_cache     = $data_dir . '/rss_change_cache.json';
 $translation_cache    = $data_dir . '/translation_cache.json';
@@ -142,6 +146,146 @@ $translation_cache    = $data_dir . '/translation_cache.json';
 $telegram_tokens_file = $data_dir . '/telegram_tokens.json';
 // Registro de items enviados a Telegram por idioma
 $telegram_sent_file   = $data_dir . '/telegram_sent.json';
+
+$google_translate_langs = [
+    'af','ar','az','ay','bg','bn','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fil','fr','ga','gl','gn','gu','ha','he','hi','hr','hu','id','is','it','ja','ka','kk','kn','ko','lt','lv','ml','mr','ms','ne','nl','no','pa','pl','pt','qu','rm','ro','ru','si','sk','sl','sq','sw','sv','ta','te','th','tl','tr','ug','uk','ur','vi','yo','zh','zh-cn','zh-tw','zu','xh','st'
+];
+$google_translate_langs = array_values(array_unique(array_map('strtolower', $google_translate_langs)));
+$google_translate_langs = array_values($google_translate_langs);
+sort($google_translate_langs);
+$google_translate_langs_set = array_fill_keys($google_translate_langs, true);
+$country_language_overrides = [
+    'ES' => ['es', 'ca', 'gl', 'eu'],
+    'US' => ['en', 'es'],
+    'CA' => ['en', 'fr'],
+    'MX' => ['es', 'en'],
+    'GT' => ['es', 'qu'],
+    'PE' => ['es', 'qu', 'ay'],
+    'BO' => ['es', 'qu', 'ay'],
+    'EC' => ['es', 'qu'],
+    'PY' => ['es', 'gn'],
+    'AR' => ['es', 'gn'],
+    'UY' => ['es', 'pt'],
+    'BR' => ['pt', 'es'],
+    'CL' => ['es', 'en'],
+    'VE' => ['es', 'en'],
+    'CO' => ['es', 'en'],
+    'BE' => ['fr', 'nl', 'de'],
+    'CH' => ['de', 'fr', 'it', 'rm'],
+    'GB' => ['en', 'cy', 'ga'],
+    'IE' => ['en', 'ga'],
+    'PT' => ['pt', 'es'],
+    'MA' => ['ar', 'fr', 'es'],
+    'DZ' => ['ar', 'fr'],
+    'ZA' => ['en', 'af', 'zu', 'xh', 'st'],
+    'NG' => ['en', 'yo', 'ha'],
+    'TZ' => ['sw', 'en'],
+    'KE' => ['sw', 'en'],
+    'SA' => ['ar', 'en'],
+    'AE' => ['ar', 'en'],
+    'IL' => ['he', 'ar', 'en'],
+    'IN' => ['hi', 'en', 'bn', 'ta', 'te', 'ml', 'mr', 'gu', 'pa', 'ur', 'kn'],
+    'PK' => ['ur', 'en'],
+    'LK' => ['si', 'ta', 'en'],
+    'NP' => ['ne', 'en'],
+    'SG' => ['en', 'zh', 'ms', 'ta'],
+    'MY' => ['ms', 'en', 'zh', 'ta'],
+    'PH' => ['fil', 'en', 'tl'],
+    'ID' => ['id', 'en', 'ms'],
+    'TH' => ['th', 'en'],
+    'VN' => ['vi', 'en'],
+    'JP' => ['ja', 'en'],
+    'KR' => ['ko', 'en'],
+    'HK' => ['zh', 'zh-tw', 'en'],
+    'MO' => ['zh', 'zh-tw', 'pt'],
+    'TW' => ['zh-tw', 'zh', 'zh-cn'],
+    'CN' => ['zh', 'zh-cn', 'zh-tw', 'ug'],
+];
+$country_language_dataset = get_language_data();
+$iso_639_map = array_change_key_case(get_iso_639_3_to_1_map(), CASE_LOWER);
+$country_language_index = [];
+$countries_for_picker = [];
+$strtolower_fn = function ($value) {
+    return function_exists('mb_strtolower') ? mb_strtolower((string)$value, 'UTF-8') : strtolower((string)$value);
+};
+foreach ($country_language_dataset as $entry) {
+    $code = strtoupper((string)($entry['cca2'] ?? ''));
+    if ($code === '') {
+        continue;
+    }
+    $nameEs = (string)($entry['translations']['spa']['common'] ?? $entry['name']['common'] ?? $code);
+    $languagesForCountry = [];
+    if (!empty($entry['languages']) && is_array($entry['languages'])) {
+        foreach ($entry['languages'] as $langCode => $langLabelEn) {
+            $langCodeLower = strtolower((string)$langCode);
+            if (strlen($langCodeLower) === 2) {
+                $targetCode = $langCodeLower;
+            } elseif (isset($iso_639_map[$langCodeLower])) {
+                $targetCode = strtolower((string)$iso_639_map[$langCodeLower]);
+            } else {
+                continue;
+            }
+            if (!isset($google_translate_langs_set[$targetCode])) {
+                continue;
+            }
+            $langDisplay = lang_name_es($targetCode);
+            if ($langDisplay === strtoupper($targetCode)) {
+                $langDisplay = (string)$langLabelEn;
+            }
+            $languagesForCountry[$targetCode] = [
+                'code' => $targetCode,
+                'name' => $langDisplay !== '' ? $langDisplay : strtoupper($targetCode),
+            ];
+        }
+    }
+    if (isset($country_language_overrides[$code])) {
+        foreach ($country_language_overrides[$code] as $overrideLang) {
+            $overrideLangLower = strtolower((string)$overrideLang);
+            if (!isset($google_translate_langs_set[$overrideLangLower])) {
+                continue;
+            }
+            if (!isset($languagesForCountry[$overrideLangLower])) {
+                $languagesForCountry[$overrideLangLower] = [
+                    'code' => $overrideLangLower,
+                    'name' => lang_name_es($overrideLangLower),
+                ];
+            }
+        }
+    }
+    if (empty($languagesForCountry)) {
+        continue;
+    }
+    $languagesForCountry = array_values($languagesForCountry);
+    usort($languagesForCountry, function ($a, $b) use ($strtolower_fn) {
+        $aName = $strtolower_fn($a['name']);
+        $bName = $strtolower_fn($b['name']);
+        return $aName <=> $bName;
+    });
+    $country_language_index[$code] = [
+        'name' => $nameEs,
+        'languages' => $languagesForCountry,
+    ];
+    $countries_for_picker[] = [
+        'code' => $code,
+        'name' => $nameEs,
+    ];
+}
+usort($countries_for_picker, function ($a, $b) use ($strtolower_fn) {
+    $aName = $strtolower_fn($a['name']);
+    $bName = $strtolower_fn($b['name']);
+    return $aName <=> $bName;
+});
+$country_language_payload = $country_language_index;
+$country_search_selected_country = '';
+$country_search_selected_country_name = '';
+$country_search_selected_languages = [];
+$country_search_term_value = '';
+$country_search_translate_checked = false;
+$country_search_results = [];
+$country_search_warnings = [];
+$country_search_errors_display = [];
+$country_search_lookups = [];
+$country_search_added_sources = [];
 
 // Guardado robusto: escribe a un temporal y renombra sobre el destino
 function safe_dom_save(\DOMDocument $dom, string $path) {
@@ -222,6 +366,7 @@ ensure_file($sources_file, "[]\n");
 ensure_file($gemini_log_file, "");
 ensure_file($rss_change_cache, "{}");
 ensure_file($translation_cache, "{}");
+ensure_file($processed_links_file, "[]\n");
 ensure_file($telegram_tokens_file, "{}");
 ensure_file($telegram_sent_file, "{}");
 ensure_file($data_dir . '/telegram_forgotten.json', "{}");
@@ -802,7 +947,7 @@ function lang_name_es($code) {
         'ckb'=>'kurdo (sorani)','ky'=>'kirguís','lo'=>'lao','la'=>'latín','lv'=>'letón','ln'=>'lingala','lt'=>'lituano','lg'=>'luganda','lb'=>'luxemburgués',
         'mk'=>'macedonio','mai'=>'maithili','mg'=>'malgache','ms'=>'malayo','ml'=>'malayalam','mt'=>'maltés','mi'=>'maorí','mr'=>'maratí',
         'mni'=>'meitei (manipuri)','lus'=>'mizo','mn'=>'mongol','my'=>'birmano','ne'=>'nepalí','no'=>'noruego','or'=>'odia (oriya)','om'=>'oromo','ps'=>'pastún',
-        'fa'=>'persa','pl'=>'polaco','pt'=>'portugués','pa'=>'panyabí','qu'=>'quechua','ro'=>'rumano','ru'=>'ruso','sm'=>'samoano','sa'=>'sánscrito',
+        'fa'=>'persa','pl'=>'polaco','pt'=>'portugués','pa'=>'panyabí','qu'=>'quechua','rm'=>'romanche','ro'=>'rumano','ru'=>'ruso','sm'=>'samoano','sa'=>'sánscrito',
         'gd'=>'gaélico escocés','nso'=>'sesotho del norte','st'=>'sesotho del sur','sn'=>'shona','sd'=>'sindhi','si'=>'cingalés','sk'=>'eslovaco',
         'sl'=>'esloveno','so'=>'somalí','es'=>'español','su'=>'sundanés','sw'=>'suajili','sv'=>'sueco','tl'=>'tagalo','tg'=>'tayiko','ta'=>'tamil',
         'tt'=>'tártaro','te'=>'telugu','th'=>'tailandés','ti'=>'tigriña','ts'=>'tsonga','tr'=>'turco','tk'=>'turcomano','uk'=>'ucraniano','ur'=>'urdu',
@@ -828,7 +973,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $examples_file,
             $gemini_log_file,
             $published_file,
-            $titlekeys_file
+            $titlekeys_file,
+            $processed_links_file,
+            $processed_link_cache_ttl,
+            4,
+            true
         );
 
         if (!empty($result['ok'])) {
@@ -864,6 +1013,177 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    if (isset($_POST['country_language_search'])) {
+        $active_tab = 'sources';
+        $selected_country_code = strtoupper(trim((string)($_POST['country_code'] ?? '')));
+        $selected_languages = $_POST['language_codes'] ?? [];
+        if (!is_array($selected_languages)) {
+            $selected_languages = [];
+        }
+        $selected_languages = array_values(array_unique(array_map(function ($code) {
+            return strtolower(trim((string)$code));
+        }, $selected_languages)));
+        $search_term_input = trim((string)($_POST['search_term'] ?? ''));
+        $translate_flag = !empty($_POST['translate_term']);
+        $state = [
+            'country_code' => $selected_country_code,
+            'country_name' => $country_language_index[$selected_country_code]['name'] ?? '',
+            'languages' => $selected_languages,
+            'term' => $search_term_input,
+            'translate' => $translate_flag,
+            'results' => [],
+        ];
+        $errors = [];
+        $warnings = [];
+        $lookups = [];
+        $added_sources = [];
+        if ($selected_country_code === '' || !isset($country_language_index[$selected_country_code])) {
+            $errors[] = 'Selecciona un país válido.';
+        }
+        if ($search_term_input === '') {
+            $errors[] = 'Introduce un término de búsqueda en español.';
+        }
+        $valid_langs = [];
+        if ($selected_country_code !== '' && isset($country_language_index[$selected_country_code])) {
+            foreach ($country_language_index[$selected_country_code]['languages'] as $langInfo) {
+                $valid_langs[$langInfo['code']] = true;
+            }
+        }
+        if (empty($selected_languages)) {
+            $errors[] = 'Selecciona al menos un idioma.';
+        } else {
+            foreach ($selected_languages as $code) {
+                if (!isset($valid_langs[$code])) {
+                    $errors[] = 'Selecciona únicamente idiomas disponibles para el país elegido.';
+                    break;
+                }
+            }
+        }
+        if (empty($errors)) {
+            $translate_api_key = telex_config_get($config, ['apis', 'google_translate', 'api_key'], '');
+            $current_sources = telex_read_json($sources_file, []);
+            if (!is_array($current_sources)) {
+                $current_sources = [];
+            }
+            $existing_sources_set = [];
+            foreach ($current_sources as $src) {
+                if (is_array($src) && !empty($src['url'])) {
+                    $existing_sources_set[telex_normalize_link($src['url'])] = true;
+                }
+            }
+            foreach ($selected_languages as $code) {
+                $final_term = $search_term_input;
+                if ($translate_flag && $code !== 'es') {
+                    if ($translate_api_key === '') {
+                        $warnings[] = 'Falta la clave de Google Translate, se usa el término original para ' . lang_name_es($code) . '.';
+                    } else {
+                        $translated = telex_google_translate([$search_term_input], $translate_api_key, $code, 'es', 'text');
+                        if (!empty($translated) && isset($translated[0]) && trim((string)$translated[0]) !== '') {
+                            $final_term = trim((string)$translated[0]);
+                        } else {
+                            $warnings[] = 'No se pudo traducir el término al ' . lang_name_es($code) . '.';
+                        }
+                    }
+                }
+                $state['results'][] = [
+                    'language_code' => $code,
+                    'language_name' => lang_name_es($code),
+                    'term' => $final_term,
+                ];
+                $encoded_term = rawurlencode($final_term);
+                $google_url = 'https://news.google.com/rss/search?q=' . $encoded_term . '+when:30d&hl=' . rawurlencode($code) . '&gl=' . rawurlencode($selected_country_code) . '&ceid=' . rawurlencode($selected_country_code . ':' . $code);
+                $google_info = null;
+                $google_content = telex_http_get($google_url, 10, $google_info);
+                $google_exists = is_string($google_content) && trim($google_content) !== '';
+                $google_effective = $google_info['url'] ?? $google_url;
+                $google_effective_norm = telex_normalize_link($google_effective);
+                $google_expected_norm = telex_normalize_link($google_url);
+                $google_status = $google_exists ? 'ok' : 'error';
+                $google_message = $google_exists ? 'Encontrado' : 'No disponible';
+                if ($google_exists && $google_effective_norm !== '' && $google_expected_norm !== '' && $google_effective_norm !== $google_expected_norm) {
+                    $google_status = 'redirect';
+                    $google_message = 'Redirigido a ' . $google_effective;
+                    $final_query = [];
+                    parse_str((string)parse_url($google_effective, PHP_URL_QUERY), $final_query);
+                    $final_ceid = strtolower((string)($final_query['ceid'] ?? ''));
+                    $expected_ceid = strtolower($selected_country_code . ':' . $code);
+                    if ($final_ceid !== '' && $final_ceid !== $expected_ceid) {
+                        $warnings[] = 'Google News redirige la búsqueda de ' . $selected_country_code . ':' . $code . ' a ' . strtoupper($final_ceid) . '.';
+                    } else {
+                        $warnings[] = 'Google News redirige la búsqueda de ' . $selected_country_code . ':' . $code . ' a otra URL.';
+                    }
+                }
+                $lookups[] = [
+                    'engine' => 'GoogleNews',
+                    'url' => $google_url,
+                    'status' => $google_status,
+                    'message' => $google_message,
+                ];
+                if ($google_exists) {
+                    $google_source_url = $google_effective_norm !== '' ? $google_effective : $google_url;
+                    $normalized_url = $google_effective_norm !== '' ? $google_effective_norm : $google_expected_norm;
+                    if ($normalized_url !== '' && !isset($existing_sources_set[$normalized_url])) {
+                        $title = 'GoogleNews ' . $final_term . ' ' . $selected_country_code . ':' . $code;
+                        $current_sources[] = [ 'name' => $title, 'url' => $google_source_url ];
+                        $existing_sources_set[$normalized_url] = true;
+                        $added_sources[] = [ 'title' => $title, 'url' => $google_source_url ];
+                    }
+                }
+
+                $bing_url = 'https://www.bing.com/news/search?q=' . $encoded_term . '&qft=interval%30d%228%22+sortbydate%3d%221%22&form=PTFTNR&setlang=' . rawurlencode($code) . '&cc=' . rawurlencode(strtolower($selected_country_code)) . '&format=rss';
+                $bing_info = null;
+                $bing_content = telex_http_get($bing_url, 10, $bing_info);
+                $bing_exists = is_string($bing_content) && trim($bing_content) !== '';
+                $bing_effective = $bing_info['url'] ?? $bing_url;
+                $bing_effective_norm = telex_normalize_link($bing_effective);
+                $bing_status = $bing_exists ? 'ok' : 'error';
+                $bing_message = $bing_exists ? 'Encontrado' : 'No disponible';
+                if ($bing_exists && $bing_effective_norm !== '' && $bing_effective_norm !== telex_normalize_link($bing_url)) {
+                    $bing_status = 'redirect';
+                    $bing_message = 'Redirigido a ' . $bing_effective;
+                }
+                $lookups[] = [
+                    'engine' => 'Bing',
+                    'url' => $bing_url,
+                    'status' => $bing_status,
+                    'message' => $bing_message,
+                ];
+                if ($bing_exists) {
+                    $bing_source_url = $bing_effective_norm !== '' ? $bing_effective : $bing_url;
+                    $normalized_bing = $bing_effective_norm !== '' ? $bing_effective_norm : telex_normalize_link($bing_url);
+                    if ($normalized_bing !== '' && !isset($existing_sources_set[$normalized_bing])) {
+                        $bing_title = 'Bing ' . $selected_country_code . ':' . $code;
+                        $current_sources[] = [ 'name' => $bing_title, 'url' => $bing_source_url ];
+                        $existing_sources_set[$normalized_bing] = true;
+                        $added_sources[] = [ 'title' => $bing_title, 'url' => $bing_source_url ];
+                    }
+                }
+            }
+            if (!empty($warnings)) {
+                $state['warnings'] = $warnings;
+                $message = 'Términos generados con avisos.';
+                $message_type = 'info';
+            } else {
+                $message = 'Términos de búsqueda generados correctamente.';
+                $message_type = 'success';
+            }
+            if (!empty($added_sources)) {
+                telex_write_json($sources_file, $current_sources);
+            } else {
+                $message = 'No encuentro canales de noticias para esas condiciones de búsqueda';
+                $message_type = 'error';
+            }
+            $state['lookups'] = $lookups;
+            $state['added_sources'] = $added_sources;
+        } else {
+            $state['errors'] = $errors;
+            $message = implode(' ', $errors);
+            $message_type = 'error';
+        }
+        $_SESSION['country_search_state'] = $state;
+        goto after_post_redirect;
+    }
+
     if (isset($_POST['save_rss_item'])) {
         $active_tab = 'rss';
         $idx = intval($_POST['save_rss_item']);
@@ -1015,11 +1335,12 @@ if (isset($_POST['action'])) {
 
     if ($suggestion_index !== false) {
         $suggestion = $sugerencias[$suggestion_index];
+        $action = $_POST['action'];
         $finalTitle = '';
         $finalDescription = '';
         $finalLink = '';
 
-        switch ($_POST['action']) {
+        switch ($action) {
             case 'approve':
                 $finalTitle = $suggestion['title'] ?? '';
                 $finalDescription = $suggestion['summary'] ?? '';
@@ -1033,14 +1354,21 @@ if (isset($_POST['action'])) {
                 $decision = 'editada';
                 break;
             case 'reject':
+                $finalTitle = $suggestion['title'] ?? '';
+                $finalDescription = $suggestion['summary'] ?? '';
+                $finalLink = $suggestion['link'] ?? '';
                 $decision = 'descartada';
                 break;
         }
 
-        if (!empty($finalTitle)) { // Allow empty description
-            $descPlain = telex_description_plain($finalDescription, $finalTitle);
-            $descHtml = telex_format_description_to_html($finalDescription);
+        $finalTitle = trim((string)$finalTitle);
+        $finalDescription = trim((string)$finalDescription);
+        $finalLink = trim((string)$finalLink);
+        $descPlain = $finalDescription !== '' ? telex_description_plain($finalDescription, $finalTitle) : '';
+        $shouldAddToFeed = in_array($action, ['approve', 'edit'], true) && $finalTitle !== '';
 
+        if ($shouldAddToFeed) { // Allow empty description
+            $descHtml = telex_format_description_to_html($finalDescription);
             // Cargar o crear rss.xml
             libxml_use_internal_errors(true);
             if (file_exists($rss_file)) {
@@ -1128,6 +1456,12 @@ if (isset($_POST['action'])) {
 
             $published[] = ['title' => $finalTitle, 'text' => $descPlain, 'timestamp' => date('c'), 'link' => $finalLink];
         }
+        $historyLink = $finalLink !== '' ? $finalLink : ($suggestion['link'] ?? '');
+        $statusMap = ['approve' => 'approved', 'edit' => 'edited', 'reject' => 'rejected'];
+        if ($historyLink !== '' && isset($statusMap[$action])) {
+            telex_mark_link_processed($processed_links_file, $processed_link_cache_ttl, $historyLink, $statusMap[$action]);
+        }
+
         $examples[] = [ 'title' => $finalTitle, 'link'  => $finalLink, 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => $descPlain ];
         $sent_titles[] = $finalTitle;
         $sent_titlekeys[] = title_key($finalTitle);
@@ -2070,7 +2404,21 @@ if (isset($_GET['message']) && !$message) {
     $message_type = $_GET['message_type'] ?? 'success';
 }
 
-$sugerencias_pendientes = json_decode(@file_get_contents($sugerencias_file), true) ?: [];
+$sugerencias_raw = json_decode(@file_get_contents($sugerencias_file), true) ?: [];
+$sugerencias_filtered = [];
+if (!empty($sugerencias_raw)) {
+    foreach ($sugerencias_raw as $sug) {
+        $summary = trim((string)($sug['summary'] ?? ''));
+        if ($summary !== '' && preg_match('/^\s*ignorar\.?\s*$/iu', $summary)) {
+            continue;
+        }
+        $sugerencias_filtered[] = $sug;
+    }
+    if (count($sugerencias_filtered) !== count($sugerencias_raw)) {
+        @file_put_contents($sugerencias_file, json_encode($sugerencias_filtered, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+}
+$sugerencias_pendientes = $sugerencias_filtered;
 $seen_keys = array_flip(read_titlekeys($titlekeys_file));
 $sugerencias_pendientes = array_values(array_filter($sugerencias_pendientes, function($sug) use ($seen_keys) {
     $k = title_key($sug['title'] ?? '');
@@ -2106,6 +2454,33 @@ $analysis_result = '';
 if (isset($_SESSION['analysis_result'])) {
     $analysis_result = $_SESSION['analysis_result'];
     unset($_SESSION['analysis_result']);
+}
+
+if (isset($_SESSION['country_search_state'])) {
+    $state = $_SESSION['country_search_state'];
+    unset($_SESSION['country_search_state']);
+    $country_search_selected_country = $state['country_code'] ?? '';
+    $country_search_selected_country_name = $state['country_name'] ?? ($country_language_index[$country_search_selected_country]['name'] ?? '');
+    $country_search_selected_languages = $state['languages'] ?? [];
+    $country_search_term_value = $state['term'] ?? '';
+    $country_search_translate_checked = !empty($state['translate']);
+    $country_search_results = $state['results'] ?? [];
+    $country_search_warnings = $state['warnings'] ?? [];
+    $country_search_errors_display = $state['errors'] ?? [];
+    $country_search_lookups = $state['lookups'] ?? [];
+    $country_search_added_sources = $state['added_sources'] ?? [];
+}
+$initial_language_options_html = '<p class="muted">Selecciona un país para ver los idiomas disponibles.</p>';
+if ($country_search_selected_country && isset($country_language_index[$country_search_selected_country])) {
+    $initial_language_options_html = '';
+    foreach ($country_language_index[$country_search_selected_country]['languages'] as $langOption) {
+        $code = $langOption['code'];
+        $checked = in_array($code, $country_search_selected_languages, true) ? ' checked' : '';
+        $initial_language_options_html .= '<label><input type="checkbox" name="language_codes[]" value="' . htmlspecialchars($code) . '"' . $checked . '> ' . htmlspecialchars($langOption['name']) . ' (' . htmlspecialchars($code) . ')</label>';
+    }
+    if ($initial_language_options_html === '') {
+        $initial_language_options_html = '<p class="muted">No hay idiomas disponibles para este país.</p>';
+    }
 }
 
 $rss_items_actuales = [];
@@ -2354,6 +2729,32 @@ if (!empty($telegram_bots)) {
         .source-item input[name="source_name[]"] { flex: 1; }
         .source-item input[name="source_url[]"] { flex: 2; }
         .source-item button { flex-shrink: 0; }
+        .country-picker-group { display: flex; gap: 0.5rem; align-items: center; }
+        .country-picker-display { flex: 1; padding: 0.6rem; border: 1px solid var(--gray); border-radius: 4px; background-color: #fff; cursor: pointer; }
+        .country-picker-display:focus { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+        .language-options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .language-options label { display: inline-flex; align-items: center; gap: 0.3rem; background-color: #f8f9fa; border: 1px solid var(--gray); border-radius: 4px; padding: 0.35rem 0.6rem; cursor: pointer; }
+        .language-options input { margin: 0; }
+        .translate-toggle { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; cursor: pointer; }
+        .country-search-results { margin-top: 1.5rem; background-color: #f8f9fa; border: 1px solid var(--gray); border-radius: 4px; padding: 1rem; }
+        .country-search-results ul { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+        .country-search-errors li { color: #b02a37; font-weight: 500; }
+        .country-search-warnings li { color: #945c00; }
+        .muted { color: var(--dark-gray); opacity: 0.7; font-size: 0.95rem; }
+        .country-search-lookups li { padding: 0.15rem 0; }
+        .country-search-lookups li.ok { color: #198754; font-weight: 500; }
+        .country-search-lookups li.error { color: #b02a37; font-weight: 500; }
+        .country-search-lookups li.redirect { color: #d39e00; font-weight: 500; }
+        .country-search-lookups code { font-size: 0.95em; }
+        .country-search-added li { padding: 0.15rem 0; }
+        .country-picker-modal { position: fixed; inset: 0; background-color: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 1rem; z-index: 2000; }
+        .country-picker-modal.active { display: flex; }
+        .country-picker-content { background-color: #fff; max-width: 460px; width: 100%; max-height: 80vh; overflow: hidden; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.2); display: flex; flex-direction: column; }
+        .country-picker-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-bottom: 1px solid var(--gray); }
+        .country-picker-list { overflow-y: auto; padding: 1rem; display: grid; gap: 0.5rem; }
+        .country-picker-list button { text-align: left; border: 1px solid var(--gray); background: #fff; padding: 0.5rem 0.75rem; border-radius: 4px; cursor: pointer; }
+        .country-picker-list button:hover { background-color: var(--light-gray); }
+        .modal-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; line-height: 1; }
         .logout-form { position: absolute; top: 1rem; right: 2rem; }
         .floating-action-button {
             position: absolute;
@@ -2540,23 +2941,18 @@ if (!empty($telegram_bots)) {
         <h2>Traducción: <?php echo htmlspecialchars($target_feed_filename); ?></h2>
         <form class="item" method="post" style="margin-bottom:1rem;">
             <input type="hidden" name="active_tab" value="traduccion">
-            <div class="form-group">
-                <label>Idioma de traducción</label>
-                <select name="translator_lang">
-                    <?php
-                    $langs = [
-                        'en','es','fr','de','it','pt','ca','gl','eu','nl','sv','no','da','fi','pl','cs','sk','sl','hu','ro','bg','el','ru','uk','ar','he','tr','fa','hi','bn','ur','ta','te','kn','ml','mr','gu','pa','zh','zh-cn','zh-tw','ja','ko','vi','id','ms','th'
-                    ];
-                    foreach ($langs as $lc) {
-                        $sel = ($lc === $target_lang) ? ' selected' : '';
-                        echo '<option value="'.htmlspecialchars($lc).'"'.$sel.'>'.htmlspecialchars(lang_name_es($lc)).' ('.htmlspecialchars($lc).')</option>';
-                    }
-                    ?>
-                </select>
-                <small>Idioma al que traducir ahora. La traducción se guardará en <?php echo htmlspecialchars($target_feed_filename); ?></small>
-            </div>
-            <button type="submit" name="set_translator_lang" class="button">Guardar idioma de traducción</button>
-        </form>
+                <div class="form-group">
+                    <label>Idioma de traducción</label>
+                    <select name="translator_lang">
+                    <?php foreach ($google_translate_langs as $lc): ?>
+                        <?php $sel = ($lc === $target_lang) ? ' selected' : ''; ?>
+                        <option value="<?php echo htmlspecialchars($lc); ?>"<?php echo $sel; ?>><?php echo htmlspecialchars(lang_name_es($lc)); ?> (<?php echo htmlspecialchars($lc); ?>)</option>
+                    <?php endforeach; ?>
+                    </select>
+                    <small>Idioma al que traducir ahora. La traducción se guardará en <?php echo htmlspecialchars($target_feed_filename); ?></small>
+                </div>
+                <button type="submit" name="set_translator_lang" class="button">Guardar idioma de traducción</button>
+            </form>
         <form class="item" method="post" style="margin-bottom:1rem;">
             <input type="hidden" name="active_tab" value="traduccion">
             <p>Genera ahora mismo la traducción de rss.xml a <?php echo htmlspecialchars($target_feed_filename); ?> con Google Translate (una sola ejecución).</p>
@@ -2763,10 +3159,7 @@ if (!empty($telegram_bots)) {
                 <label>Idioma del bot</label>
                 <select name="telegram_lang" required>
                     <?php
-                    $langs_add = [
-                        'en','es','fr','de','it','pt','ca','gl','eu','nl','sv','no','da','fi','pl','cs','sk','sl','hu','ro','bg','el','ru','uk','ar','he','tr','fa','hi','bn','ur','ta','te','kn','ml','mr','gu','pa','zh','zh-cn','zh-tw','ja','ko','vi','id','ms','th'
-                    ];
-                    foreach ($langs_add as $lc2) {
+                    foreach ($google_translate_langs as $lc2) {
                         echo '<option value="'.htmlspecialchars($lc2).'">'.htmlspecialchars(lang_name_es($lc2)).' ('.htmlspecialchars($lc2).')</option>';
                     }
                     ?>
@@ -2848,6 +3241,95 @@ if (!empty($telegram_bots)) {
 
     <div id="sources" class="tab-content<?php echo $active_tab === 'sources' ? ' active' : ''; ?>">
         <h2>Gestionar Fuentes RSS</h2>
+
+        <div class="item">
+            <h3 style="margin-top:0;">Búsqueda por países</h3>
+            <form method="post" id="country-language-form">
+                <input type="hidden" name="active_tab" value="sources">
+                <input type="hidden" name="country_language_search" value="1">
+                <div class="form-group">
+                    <label>País</label>
+                    <div class="country-picker-group">
+                        <input type="hidden" name="country_code" id="country_code" value="<?php echo htmlspecialchars($country_search_selected_country); ?>">
+                        <input type="text" id="country_name_display" class="country-picker-display" value="<?php echo htmlspecialchars($country_search_selected_country_name); ?>" placeholder="Selecciona un país" readonly>
+                        <button type="button" class="button" id="open-country-picker">Elegir</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Idiomas disponibles</label>
+                    <div id="language-options" class="language-options"><?php echo $initial_language_options_html; ?></div>
+                </div>
+                <div class="form-group">
+                    <label>Término de búsqueda (español)</label>
+                    <input type="text" name="search_term" value="<?php echo htmlspecialchars($country_search_term_value); ?>" placeholder="Cooperativas, economía social, mutualismo...">
+                </div>
+                <label class="checkbox-inline translate-toggle">
+                    <input type="checkbox" name="translate_term" value="1" <?php echo $country_search_translate_checked ? 'checked' : ''; ?>>
+                    Traducir término a los idiomas seleccionados
+                </label>
+                <div class="button-group" style="margin-top:1rem;">
+                    <button type="submit" class="button approve">Generar términos</button>
+                </div>
+            </form>
+            <?php if (!empty($country_search_errors_display) || !empty($country_search_warnings) || !empty($country_search_results)): ?>
+                <div class="country-search-results">
+                    <?php if (!empty($country_search_errors_display)): ?>
+                        <ul class="country-search-errors">
+                            <?php foreach ($country_search_errors_display as $err): ?>
+                                <li><?php echo htmlspecialchars($err); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                    <?php if (!empty($country_search_results)): ?>
+                        <h4>Resultados</h4>
+                        <ul>
+                            <?php foreach ($country_search_results as $result): ?>
+                                <li><strong><?php echo htmlspecialchars($result['language_name']); ?> (<?php echo htmlspecialchars($result['language_code']); ?>):</strong> <?php echo htmlspecialchars($result['term']); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                    <?php if (!empty($country_search_lookups)): ?>
+                        <h4>Comprobaciones</h4>
+                        <ul class="country-search-lookups">
+                            <?php foreach ($country_search_lookups as $lookup):
+                                $statusClass = htmlspecialchars($lookup['status'] ?? 'info');
+                                $messageText = $lookup['message'] ?? (($lookup['status'] ?? '') === 'ok' ? 'Encontrado' : ((($lookup['status'] ?? '') === 'error') ? 'No disponible' : 'Redirigido'));
+                            ?>
+                                <li class="<?php echo $statusClass; ?>">Buscando <code><?php echo htmlspecialchars($lookup['url']); ?></code> … <?php echo htmlspecialchars($messageText); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                    <?php if (!empty($country_search_added_sources)): ?>
+                        <h4>Fuentes añadidas</h4>
+                        <ul class="country-search-added">
+                            <?php foreach ($country_search_added_sources as $added): ?>
+                                <li><strong><?php echo htmlspecialchars($added['title']); ?></strong><br><code><?php echo htmlspecialchars($added['url']); ?></code></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                    <?php if (!empty($country_search_warnings)): ?>
+                        <ul class="country-search-warnings">
+                            <?php foreach ($country_search_warnings as $warn): ?>
+                                <li><?php echo htmlspecialchars($warn); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <div id="country-picker-modal" class="country-picker-modal" aria-hidden="true">
+            <div class="country-picker-content">
+                <div class="country-picker-header">
+                    <h4>Selecciona un país</h4>
+                    <button type="button" class="modal-close" id="close-country-picker" aria-label="Cerrar">&times;</button>
+                </div>
+                <div class="form-group" style="margin-top:0;">
+                    <input type="text" id="country-picker-search" placeholder="Buscar país...">
+                </div>
+                <div class="country-picker-list" id="country-picker-list"></div>
+            </div>
+        </div>
 
         <form class="item" method="post" id="sources-form">
             <input type="hidden" name="active_tab" value="sources">
@@ -2968,6 +3450,13 @@ if (!empty($telegram_bots)) {
 </div>
 
 <script>
+    const countryLanguageData = <?php echo json_encode($country_language_payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    const countriesForPicker = <?php echo json_encode($countries_for_picker, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    const countrySearchInitialState = {
+        countryCode: <?php echo json_encode($country_search_selected_country); ?>,
+        languages: <?php echo json_encode($country_search_selected_languages); ?>
+    };
+
     function openTab(evt, tabName) {
         if (evt && typeof evt.preventDefault === 'function') {
             evt.preventDefault();
@@ -3054,6 +3543,170 @@ if (!empty($telegram_bots)) {
                 }
                 openTab(e, tab);
             });
+        }
+
+        var languageOptionsContainer = document.getElementById('language-options');
+        var countryCodeInput = document.getElementById('country_code');
+        var countryNameDisplay = document.getElementById('country_name_display');
+        var openCountryPickerBtn = document.getElementById('open-country-picker');
+        var countryPickerModal = document.getElementById('country-picker-modal');
+        var closeCountryPickerBtn = document.getElementById('close-country-picker');
+        var countryPickerList = document.getElementById('country-picker-list');
+        var countryPickerSearch = document.getElementById('country-picker-search');
+
+        if (languageOptionsContainer && countryCodeInput && countryNameDisplay && openCountryPickerBtn && countryPickerModal && countryPickerList) {
+            const getCurrentLanguageSelection = function () {
+                var checked = languageOptionsContainer.querySelectorAll('input[type="checkbox"]:checked');
+                var values = [];
+                for (var idx = 0; idx < checked.length; idx++) {
+                    values.push(checked[idx].value);
+                }
+                return values;
+            };
+
+            const renderLanguageOptions = function (code, selectedSet) {
+                languageOptionsContainer.innerHTML = '';
+                var data = countryLanguageData[code];
+                if (!data || !Array.isArray(data.languages) || data.languages.length === 0) {
+                    languageOptionsContainer.innerHTML = '<p class="muted">No hay idiomas disponibles para este país.</p>';
+                    return;
+                }
+                data.languages.forEach(function (lang) {
+                    var label = document.createElement('label');
+                    var input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.name = 'language_codes[]';
+                    input.value = lang.code;
+                    if (selectedSet && selectedSet.has(lang.code)) {
+                        input.checked = true;
+                    }
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(' ' + lang.name + ' (' + lang.code + ')'));
+                    languageOptionsContainer.appendChild(label);
+                });
+            };
+
+            const setCountry = function (code, preserveSelection) {
+                if (!code || !countryLanguageData[code]) {
+                    countryCodeInput.value = '';
+                    countryNameDisplay.value = '';
+                    languageOptionsContainer.innerHTML = '<p class="muted">Selecciona un país para ver los idiomas disponibles.</p>';
+                    countrySearchInitialState.countryCode = '';
+                    countrySearchInitialState.languages = [];
+                    return;
+                }
+                countryCodeInput.value = code;
+                countryNameDisplay.value = countryLanguageData[code].name;
+                var selectedSet = new Set();
+                if (preserveSelection) {
+                    getCurrentLanguageSelection().forEach(function (value) {
+                        selectedSet.add(value);
+                    });
+                    if (selectedSet.size === 0 && Array.isArray(countrySearchInitialState.languages)) {
+                        countrySearchInitialState.languages.forEach(function (value) {
+                            selectedSet.add(value);
+                        });
+                    }
+                } else if (countrySearchInitialState.countryCode === code && Array.isArray(countrySearchInitialState.languages)) {
+                    countrySearchInitialState.languages.forEach(function (value) {
+                        selectedSet.add(value);
+                    });
+                }
+                renderLanguageOptions(code, selectedSet);
+                countrySearchInitialState.countryCode = code;
+                countrySearchInitialState.languages = Array.from(selectedSet);
+            };
+
+            const filterCountries = function () {
+                if (!countryPickerSearch) {
+                    return;
+                }
+                var query = countryPickerSearch.value ? countryPickerSearch.value.toLowerCase() : '';
+                var options = countryPickerList.querySelectorAll('button');
+                for (var c = 0; c < options.length; c++) {
+                    var text = options[c].textContent.toLowerCase();
+                    var match = query === '' || text.indexOf(query) !== -1;
+                    options[c].style.display = match ? 'block' : 'none';
+                }
+            };
+
+            const openModal = function () {
+                countryPickerModal.classList.add('active');
+                countryPickerModal.setAttribute('aria-hidden', 'false');
+                if (countryPickerSearch) {
+                    countryPickerSearch.value = '';
+                    filterCountries();
+                    setTimeout(function () {
+                        countryPickerSearch.focus();
+                    }, 50);
+                }
+            };
+
+            const closeModal = function () {
+                countryPickerModal.classList.remove('active');
+                countryPickerModal.setAttribute('aria-hidden', 'true');
+            };
+
+            if (countryPickerList && countryPickerList.children.length === 0) {
+                if (countriesForPicker.length === 0) {
+                    countryPickerList.innerHTML = '<p class="muted">No hay países disponibles.</p>';
+                } else {
+                    countriesForPicker.forEach(function (country) {
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.textContent = country.name;
+                        btn.dataset.code = country.code;
+                        btn.addEventListener('click', function () {
+                            var preserve = countryCodeInput.value === country.code;
+                            setCountry(country.code, preserve);
+                            closeModal();
+                        });
+                        countryPickerList.appendChild(btn);
+                    });
+                }
+            }
+
+            if (countryPickerSearch) {
+                countryPickerSearch.addEventListener('input', filterCountries);
+            }
+
+            openCountryPickerBtn.addEventListener('click', function () {
+                openModal();
+            });
+            countryNameDisplay.addEventListener('click', function () {
+                openModal();
+            });
+            countryNameDisplay.addEventListener('focus', function () {
+                openModal();
+            });
+
+            if (closeCountryPickerBtn) {
+                closeCountryPickerBtn.addEventListener('click', function () {
+                    closeModal();
+                });
+            }
+
+            countryPickerModal.addEventListener('click', function (event) {
+                if (event.target === countryPickerModal) {
+                    closeModal();
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && countryPickerModal.classList.contains('active')) {
+                    closeModal();
+                }
+            });
+
+            if (countrySearchInitialState.countryCode && countryLanguageData[countrySearchInitialState.countryCode]) {
+                setCountry(countrySearchInitialState.countryCode, true);
+            } else if (countryCodeInput.value && countryLanguageData[countryCodeInput.value]) {
+                setCountry(countryCodeInput.value, true);
+            } else {
+                languageOptionsContainer.innerHTML = '<p class="muted">Selecciona un país para ver los idiomas disponibles.</p>';
+            }
+
+            filterCountries();
         }
 
         openTab(null, activeTab);

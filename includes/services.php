@@ -128,7 +128,7 @@ if (!function_exists('telex_flag_enabled')) {
 }
 
 if (!function_exists('telex_http_get')) {
-    function telex_http_get(string $url, int $timeout = 20): ?string
+    function telex_http_get(string $url, int $timeout = 20, ?array &$info = null): ?string
     {
         $ch = curl_init();
         $headers = [
@@ -144,8 +144,12 @@ if (!function_exists('telex_http_get')) {
         ]);
         $resp = curl_exec($ch);
         $err  = curl_error($ch);
-        $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $infoData = curl_getinfo($ch);
+        $http = (int)($infoData['http_code'] ?? 0);
         curl_close($ch);
+        if ($info !== null) {
+            $info = is_array($infoData) ? $infoData : [];
+        }
         if ($err) {
             return null;
         }
@@ -348,9 +352,69 @@ if (!function_exists('telex_normalize_link')) {
     }
 }
 
-if (!function_exists('telex_generate_suggestions')) {
-    function telex_generate_suggestions(array $config, string $prompt_file, string $sources_file, string $suggestions_file, string $examples_file, string $log_file, string $published_file, string $titlekeys_file, int $limit_per_source = 4): array
+if (!function_exists('telex_load_processed_links')) {
+    function telex_load_processed_links(string $path, int $ttlSeconds = 0): array
     {
+        $raw = telex_read_json($path, []);
+        if (!is_array($raw)) {
+            $raw = [];
+        }
+        $now = time();
+        $cutoff = $ttlSeconds > 0 ? ($now - $ttlSeconds) : null;
+        $result = [];
+        $changed = false;
+        foreach ($raw as $entry) {
+            if (!is_array($entry)) {
+                $changed = true;
+                continue;
+            }
+            $link = telex_normalize_link($entry['link'] ?? '');
+            if ($link === '') {
+                $changed = true;
+                continue;
+            }
+            $timestampRaw = (string)($entry['timestamp'] ?? '');
+            $ts = $timestampRaw !== '' ? strtotime($timestampRaw) : 0;
+            if ($cutoff !== null && ($ts === 0 || $ts < $cutoff)) {
+                $changed = true;
+                continue;
+            }
+            $result[$link] = [
+                'link' => $link,
+                'status' => (string)($entry['status'] ?? 'processed'),
+                'timestamp' => $ts > 0 ? date('c', $ts) : date('c'),
+            ];
+        }
+        if ($changed) {
+            telex_write_json($path, array_values($result));
+        }
+        return $result;
+    }
+}
+
+if (!function_exists('telex_mark_link_processed')) {
+    function telex_mark_link_processed(string $path, int $ttlSeconds, string $link, string $status): void
+    {
+        $normalized = telex_normalize_link($link);
+        if ($normalized === '') {
+            return;
+        }
+        $entries = telex_load_processed_links($path, $ttlSeconds);
+        $entries[$normalized] = [
+            'link' => $normalized,
+            'status' => $status,
+            'timestamp' => date('c'),
+        ];
+        telex_write_json($path, array_values($entries));
+    }
+}
+
+if (!function_exists('telex_generate_suggestions')) {
+    function telex_generate_suggestions(array $config, string $prompt_file, string $sources_file, string $suggestions_file, string $examples_file, string $log_file, string $published_file, string $titlekeys_file, string $processed_links_file = '', int $processed_links_ttl = 0, int $limit_per_source = 4, bool $manual_trigger = false): array
+    {
+        if (!$manual_trigger) {
+            return [ 'ok' => false, 'message' => 'Generación manual no autorizada (pulsa "Recibir Telex").' ];
+        }
         $apiKey = telex_config_get($config, ['apis', 'gemini', 'api_key'], '');
         if ($apiKey === '') {
             return [ 'ok' => false, 'message' => 'Falta la clave de Gemini.' ];
@@ -391,6 +455,13 @@ if (!function_exists('telex_generate_suggestions')) {
                 }
             }
         }
+        if ($processed_links_file !== '') {
+            $processedTtl = $processed_links_ttl > 0 ? $processed_links_ttl : 0;
+            $processedLinks = telex_load_processed_links($processed_links_file, $processedTtl);
+            foreach ($processedLinks as $link => $_entry) {
+                $existingLinks[$link] = true;
+            }
+        }
         $titlekeys = telex_read_json($titlekeys_file, []);
         if (!is_array($titlekeys)) {
             $titlekeys = [];
@@ -427,7 +498,7 @@ if (!function_exists('telex_generate_suggestions')) {
                 continue;
             }
             $text = trim((string)($response['text'] ?? ''));
-            if ($text === '' || strtoupper($text) === 'IGNORAR') {
+            if ($text === '' || preg_match('/^\s*ignorar\.?\s*$/iu', $text)) {
                 $skipped++;
                 continue;
             }
