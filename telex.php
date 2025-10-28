@@ -159,35 +159,35 @@ $segib_member_countries = ['AD','AR','BO','BR','CL','CO','CR','CU','EC','SV','ES
 $country_language_overrides = [
     'ES' => ['es', 'ca', 'gl', 'eu'],
     'US' => ['en', 'es'],
-    'CA' => ['en', 'fr', 'es'],
-    'MX' => ['es', 'en'],
+    'CA' => ['en', 'fr'],
+    'MX' => ['es'],
     'GT' => ['es', 'qu'],
     'PE' => ['es', 'qu', 'ay'],
     'BO' => ['es', 'qu', 'ay'],
     'EC' => ['es', 'qu'],
     'PY' => ['es', 'gn'],
     'AR' => ['es', 'gn'],
-    'UY' => ['es', 'pt'],
-    'BR' => ['pt', 'es'],
-    'CL' => ['es', 'en'],
-    'VE' => ['es', 'en'],
-    'CO' => ['es', 'en'],
+    'UY' => ['es'],
+    'BR' => ['pt'],
+    'CL' => ['es'],
+    'VE' => ['es'],
+    'CO' => ['es'],
     'AD' => ['ca', 'es', 'fr'],
     'AT' => ['de'],
     'BE' => ['fr', 'nl', 'de'],
     'BG' => ['bg'],
-    'CR' => ['es', 'en'],
-    'CU' => ['es', 'en'],
+    'CR' => ['es'],
+    'CU' => ['es'],
     'CY' => ['el', 'tr'],
     'CZ' => ['cs'],
     'DK' => ['da'],
-    'DO' => ['es', 'en'],
+    'DO' => ['es'],
     'EE' => ['et'],
     'FI' => ['fi', 'sv'],
     'FR' => ['fr'],
     'DE' => ['de'],
     'GR' => ['el'],
-    'HN' => ['es', 'en'],
+    'HN' => ['es'],
     'HR' => ['hr'],
     'HU' => ['hu'],
     'IE' => ['en', 'ga'],
@@ -196,11 +196,11 @@ $country_language_overrides = [
     'LT' => ['lt'],
     'LU' => ['fr', 'de'],
     'MT' => ['mt', 'en'],
-    'NI' => ['es', 'en'],
+    'NI' => ['es'],
     'NL' => ['nl'],
-    'PA' => ['es', 'en'],
+    'PA' => ['es'],
     'PL' => ['pl'],
-    'PT' => ['pt', 'es'],
+    'PT' => ['pt'],
     'RO' => ['ro'],
     'SE' => ['sv'],
     'SK' => ['sk'],
@@ -1134,12 +1134,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }, $selected_languages)));
         $search_term_input = trim((string)($_POST['search_term'] ?? ''));
         $translate_flag = !empty($_POST['translate_term']);
+        $include_bing = !empty($_POST['include_bing_map']);
         $state = [
             'country_code' => $selected_country_code,
             'country_name' => $country_language_index[$selected_country_code]['name'] ?? ($selected_country_code === 'EU' ? 'Unión Europea' : ($selected_country_code === 'IB' ? 'Iberoamérica (SEGIB)' : '')),
             'languages' => $selected_languages,
             'term' => $search_term_input,
             'translate' => $translate_flag,
+            'include_bing' => $include_bing,
             'results' => [],
         ];
         $errors = [];
@@ -1150,6 +1152,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $languages_by_country = [];
         $is_eu = ($selected_country_code === 'EU');
         $is_segib = ($selected_country_code === 'IB');
+        $selected_langs_set = [];
+        if (!empty($selected_languages)) {
+            foreach ($selected_languages as $langSel) {
+                $selected_langs_set[strtolower($langSel)] = true;
+            }
+        }
 
         if ($selected_country_code === '' || (!$is_eu && !$is_segib && !isset($country_language_index[$selected_country_code]))) {
             $errors[] = 'Selecciona un país válido.';
@@ -1173,6 +1181,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (empty($langCodes)) {
                     continue;
                 }
+                if (!empty($selected_langs_set)) {
+                    $langCodes = array_values(array_filter($langCodes, function ($code) use ($selected_langs_set) {
+                        return isset($selected_langs_set[$code]);
+                    }));
+                }
+                if (empty($langCodes)) {
+                    continue;
+                }
                 $countries_to_process[] = $memberCode;
                 $languages_by_country[$memberCode] = $langCodes;
             }
@@ -1189,6 +1205,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             sort($union_codes);
             $state['languages'] = $union_codes;
             $state['country_name'] = 'Unión Europea';
+            if (empty($union_codes)) {
+                $errors[] = 'Ninguno de los idiomas seleccionados coincide con las lenguas oficiales de la Unión Europea.';
+            }
         } elseif ($is_segib) {
             foreach ($segib_member_countries as $memberCode) {
                 if (!isset($country_language_index[$memberCode])) {
@@ -1201,6 +1220,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $langCodes = array_values(array_unique(array_map(function ($langInfo) {
                     return strtolower((string)$langInfo['code']);
                 }, $langEntries)));
+                if (empty($langCodes)) {
+                    continue;
+                }
+                if (!empty($selected_langs_set)) {
+                    $langCodes = array_values(array_filter($langCodes, function ($code) use ($selected_langs_set) {
+                        return isset($selected_langs_set[$code]);
+                    }));
+                }
                 if (empty($langCodes)) {
                     continue;
                 }
@@ -1220,6 +1247,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             sort($union_codes);
             $state['languages'] = $union_codes;
             $state['country_name'] = 'Iberoamérica (SEGIB)';
+            if (empty($union_codes)) {
+                $errors[] = 'Ninguno de los idiomas seleccionados coincide con las lenguas oficiales de los países de la SEGIB.';
+            }
         } else {
             $valid_langs = [];
             if (isset($country_language_index[$selected_country_code])) {
@@ -1331,40 +1361,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    $bing_url = 'https://www.bing.com/news/search?q=' . $encoded_term . '&qft=interval%30d%228%22+sortbydate%3d%221%22&form=PTFTNR&setlang=' . rawurlencode($code) . '&cc=' . rawurlencode(strtolower($country_code_current)) . '&format=rss';
-                    $bing_info = null;
-                    $bing_content = telex_http_get($bing_url, 10, $bing_info);
-                    $bing_exists = is_string($bing_content) && trim($bing_content) !== '';
-                    $bing_effective = $bing_info['url'] ?? $bing_url;
-                    $bing_effective_norm = telex_normalize_link($bing_effective);
-                    $bing_status = $bing_exists ? 'ok' : 'error';
-                    $bing_message = $bing_exists ? 'Encontrado' : 'No disponible';
-                    if ($bing_exists && $bing_effective_norm !== '' && $bing_effective_norm !== telex_normalize_link($bing_url)) {
-                        $bing_status = 'redirect';
-                        $bing_message = 'Redirigido a ' . $bing_effective;
-                    }
-                    $lookups[] = [
-                        'engine' => 'Bing',
-                        'url' => $bing_url,
-                        'status' => $bing_status,
-                        'message' => $bing_message,
-                        'country_code' => $country_code_current,
-                        'language_code' => $code,
-                    ];
-                    if ($bing_exists) {
-                        $bing_source_url = $bing_effective_norm !== '' ? $bing_effective : $bing_url;
-                        $normalized_bing = $bing_effective_norm !== '' ? $bing_effective_norm : telex_normalize_link($bing_url);
-                        if ($normalized_bing !== '' && !isset($existing_sources_set[$normalized_bing])) {
-                            $bing_title = 'Bing ' . $country_code_current . ':' . $code;
-                            $current_sources[] = [ 'name' => $bing_title, 'url' => $bing_source_url ];
-                            $existing_sources_set[$normalized_bing] = true;
-                            $added_sources[] = [
-                                'title' => $bing_title,
-                                'url' => $bing_source_url,
-                                'engine' => 'Bing',
-                                'country_code' => $country_code_current,
-                                'language_code' => $code,
-                            ];
+                    if ($include_bing) {
+                        $bing_url = 'https://www.bing.com/news/search?q=' . $encoded_term . '&qft=interval%30d%228%22+sortbydate%3d%221%22&form=PTFTNR&setlang=' . rawurlencode($code) . '&cc=' . rawurlencode(strtolower($country_code_current)) . '&format=rss';
+                        $bing_info = null;
+                        $bing_content = telex_http_get($bing_url, 10, $bing_info);
+                        $bing_exists = is_string($bing_content) && trim($bing_content) !== '';
+                        $bing_effective = $bing_info['url'] ?? $bing_url;
+                        $bing_effective_norm = telex_normalize_link($bing_effective);
+                        $bing_status = $bing_exists ? 'ok' : 'error';
+                        $bing_message = $bing_exists ? 'Encontrado' : 'No disponible';
+                        if ($bing_exists && $bing_effective_norm !== '' && $bing_effective_norm !== telex_normalize_link($bing_url)) {
+                            $bing_status = 'redirect';
+                            $bing_message = 'Redirigido a ' . $bing_effective;
+                        }
+                        $lookups[] = [
+                            'engine' => 'Bing',
+                            'url' => $bing_url,
+                            'status' => $bing_status,
+                            'message' => $bing_message,
+                            'country_code' => $country_code_current,
+                            'language_code' => $code,
+                        ];
+                        if ($bing_exists) {
+                            $bing_source_url = $bing_effective_norm !== '' ? $bing_effective : $bing_url;
+                            $normalized_bing = $bing_effective_norm !== '' ? $bing_effective_norm : telex_normalize_link($bing_url);
+                            if ($normalized_bing !== '' && !isset($existing_sources_set[$normalized_bing])) {
+                                $bing_title = 'Bing ' . $country_code_current . ':' . $code;
+                                $current_sources[] = [ 'name' => $bing_title, 'url' => $bing_source_url ];
+                                $existing_sources_set[$normalized_bing] = true;
+                                $added_sources[] = [
+                                    'title' => $bing_title,
+                                    'url' => $bing_source_url,
+                                    'engine' => 'Bing',
+                                    'country_code' => $country_code_current,
+                                    'language_code' => $code,
+                                ];
+                            }
                         }
                     }
                 }
@@ -2675,6 +2707,7 @@ if (isset($_SESSION['country_search_state'])) {
     $country_search_selected_languages = $state['languages'] ?? [];
     $country_search_term_value = $state['term'] ?? '';
     $country_search_translate_checked = !empty($state['translate']);
+    $country_search_include_bing = !empty($state['include_bing']);
     $country_search_results = $state['results'] ?? [];
     $country_search_warnings = $state['warnings'] ?? [];
     $country_search_errors_display = $state['errors'] ?? [];
@@ -3477,6 +3510,10 @@ if (!empty($telegram_bots)) {
                 <label class="checkbox-inline translate-toggle">
                     <input type="checkbox" name="translate_term" value="1" <?php echo $country_search_translate_checked ? 'checked' : ''; ?>>
                     Traducir término a los idiomas seleccionados
+                </label>
+                <label class="checkbox-inline translate-toggle" style="margin-left:1rem;">
+                    <input type="checkbox" name="include_bing_map" value="1" <?php echo !empty($country_search_include_bing) ? 'checked' : ''; ?>>
+                    Agregar mapa de medios de Bing
                 </label>
                 <div class="button-group" style="margin-top:1rem;">
                     <button type="submit" class="button approve">Generar términos</button>
