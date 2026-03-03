@@ -947,6 +947,29 @@ if (!function_exists('tg_send')) {
         $t = trim((string)$title);
         $d = trim((string)$desc);
         $u = trim((string)$url);
+        $p = trim((string)$photo_url);
+
+        // Evita dobles envíos inmediatos del mismo mensaje (doble clic o doble disparo del flujo).
+        $dedupeWindow = 30;
+        $dedupeFile = __DIR__ . '/data/.telegram_recent_cache.json';
+        $dedupeKey = hash('sha256', implode('|', [(string)$chat_id, $t, $d, $u, $p]));
+        $recent = file_exists($dedupeFile) ? (json_decode((string)@file_get_contents($dedupeFile), true) ?: []) : [];
+        if (!is_array($recent)) {
+            $recent = [];
+        }
+        $now = time();
+        foreach ($recent as $k => $ts) {
+            if (!is_int($ts) && !ctype_digit((string)$ts)) {
+                unset($recent[$k]);
+                continue;
+            }
+            if (((int)$ts + $dedupeWindow) < $now) {
+                unset($recent[$k]);
+            }
+        }
+        if (isset($recent[$dedupeKey]) && ((int)$recent[$dedupeKey] + $dedupeWindow) >= $now) {
+            return ['ok' => true, 'deduped' => true];
+        }
 
         if ($t !== '' && $d !== '') {
             $pattern = '~^\s*' . preg_quote($t, '~') . '\b[\s:–—-]*~ui';
@@ -1003,7 +1026,11 @@ if (!function_exists('tg_send')) {
         $resp = curl_exec($ch); $err = curl_error($ch); $http = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
         if ($err) return ['ok' => false, 'error' => $err, 'http' => $http];
         $j = json_decode((string)$resp, true);
-        if (is_array($j) && !empty($j['ok'])) return ['ok' => true];
+        if (is_array($j) && !empty($j['ok'])) {
+            $recent[$dedupeKey] = $now;
+            @file_put_contents($dedupeFile, json_encode($recent, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            return ['ok' => true];
+        }
         return ['ok' => false, 'error' => is_array($j) ? ($j['description'] ?? 'Error desconocido') : 'HTTP ' . $http, 'http' => $http];
     }
 }
