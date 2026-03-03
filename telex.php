@@ -480,7 +480,7 @@ ensure_file($telegram_tokens_file, "{}");
 ensure_file($telegram_sent_file, "{}");
 ensure_file($data_dir . '/telegram_forgotten.json', "{}");
 if (!file_exists($prompt_file)) {
-    $default_prompt = "CRITERIOS...\n- Usa {{title}}, {{description}}, {{link}} y {{examples}}.\nSalida: una línea, ≤40 palabras, o IGNORAR.";
+    $default_prompt = "CRITERIOS...\n- Usa {{title}}, {{description}}, {{link}}, {{examples}} y {{patterns}}.\nSalida: una línea, ≤40 palabras, o IGNORAR.";
     @file_put_contents($prompt_file, $default_prompt);
 }
 
@@ -1582,6 +1582,8 @@ if (isset($_POST['action'])) {
         $finalTitle = '';
         $finalDescription = '';
         $finalLink = '';
+        $sourceTitle = trim((string)($suggestion['title'] ?? ''));
+        $sourceLink = trim((string)($suggestion['link'] ?? ''));
 
         switch ($action) {
             case 'approve':
@@ -1607,6 +1609,9 @@ if (isset($_POST['action'])) {
         $finalTitle = trim((string)$finalTitle);
         $finalDescription = trim((string)$finalDescription);
         $finalLink = trim((string)$finalLink);
+        if ($finalTitle === '' && $sourceTitle !== '') {
+            $finalTitle = $sourceTitle;
+        }
         $descPlain = $finalDescription !== '' ? telex_description_plain($finalDescription, $finalTitle) : '';
         $shouldAddToFeed = in_array($action, ['approve', 'edit'], true) && $finalTitle !== '';
 
@@ -1699,15 +1704,32 @@ if (isset($_POST['action'])) {
 
             $published[] = ['title' => $finalTitle, 'text' => $descPlain, 'timestamp' => date('c'), 'link' => $finalLink];
         }
-        $historyLink = $finalLink !== '' ? $finalLink : ($suggestion['link'] ?? '');
         $statusMap = ['approve' => 'approved', 'edit' => 'edited', 'reject' => 'rejected'];
-        if ($historyLink !== '' && isset($statusMap[$action])) {
-            telex_mark_link_processed($processed_links_file, $processed_link_cache_ttl, $historyLink, $statusMap[$action]);
+        if (isset($statusMap[$action])) {
+            $historyLinks = [];
+            if ($sourceLink !== '') {
+                $historyLinks[] = $sourceLink;
+            }
+            if ($finalLink !== '' && $finalLink !== $sourceLink) {
+                $historyLinks[] = $finalLink;
+            }
+            foreach (array_values(array_unique($historyLinks)) as $historyLink) {
+                telex_mark_link_processed($processed_links_file, $processed_link_cache_ttl, $historyLink, $statusMap[$action]);
+            }
         }
 
-        $examples[] = [ 'title' => $finalTitle, 'link'  => $finalLink, 'decision' => $decision, 'resumen_original' => $suggestion['summary'], 'resumen_final'    => $descPlain ];
-        $sent_titles[] = $finalTitle;
-        $sent_titlekeys[] = title_key($finalTitle);
+        $effectiveTitle = $finalTitle !== '' ? $finalTitle : $sourceTitle;
+        $examples[] = [
+            'title' => $effectiveTitle,
+            'title_key' => title_key($effectiveTitle),
+            'link'  => $finalLink,
+            'original_link' => $sourceLink,
+            'decision' => $decision,
+            'resumen_original' => $suggestion['summary'],
+            'resumen_final' => $descPlain
+        ];
+        $sent_titles[] = $effectiveTitle;
+        $sent_titlekeys[] = title_key($effectiveTitle);
         array_splice($sugerencias, $suggestion_index, 1);
         file_put_contents($sugerencias_file, json_encode($sugerencias, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         file_put_contents($examples_file,     json_encode($examples,     JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -3476,7 +3498,7 @@ if (!empty($telegram_bots)) {
         <form class="item" method="post">
             <input type="hidden" name="active_tab" value="prompt">
             <div class="form-group">
-                <label for="prompt_text">Texto del Prompt (usa {{title}}, {{description}}, {{link}} y {{examples}} como variables):</label>
+                <label for="prompt_text">Texto del Prompt (usa {{title}}, {{description}}, {{link}}, {{examples}} y {{patterns}} como variables):</label>
                 <textarea name="prompt_text" id="prompt_text" style="height: 400px; font-family: monospace;"><?php echo htmlspecialchars($prompt_actual); ?></textarea>
             </div>
             <button type="submit" name="save_prompt" class="button">Guardar Prompt</button>

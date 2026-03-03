@@ -260,23 +260,156 @@ if (!function_exists('telex_collect_feed_items')) {
 }
 
 if (!function_exists('telex_format_examples_for_prompt')) {
+    function telex_prompt_title_key(string $text): string
+    {
+        $text = html_entity_decode((string)$text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $text = mb_strtolower($text, 'UTF-8');
+        if (class_exists('Normalizer')) {
+            $text = Normalizer::normalize($text, Normalizer::FORM_D);
+            $text = preg_replace('/\p{Mn}+/u', '', $text);
+        }
+        $text = preg_replace('/[“”‘’«»"\'\.\!\?¡¿:;\(\)\{\}\[\],–—\-_\/\\\\]+/u', ' ', $text);
+        $text = preg_replace('/\b(el|la|los|las|un|una|unos|unas|de|del|al|y|o|u|en|por|para|con|sin|sobre|entre|ante|bajo|tras|desde|hasta|que|se|lo|su|sus|a|e)\b/u', ' ', $text);
+        $text = preg_replace('/\s+/u', ' ', trim($text));
+        $parts = preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+        $uniq = [];
+        $seen = [];
+        foreach ($parts as $part) {
+            if (mb_strlen($part, 'UTF-8') <= 2 || isset($seen[$part])) {
+                continue;
+            }
+            $seen[$part] = true;
+            $uniq[] = $part;
+            if (count($uniq) >= 12) {
+                break;
+            }
+        }
+        return implode(' ', $uniq);
+    }
+
+    function telex_is_google_news_url(string $url): bool
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return false;
+        }
+        $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?? ''));
+        return $host === 'news.google.com' || str_ends_with($host, '.news.google.com');
+    }
+
+    function telex_compact_prompt_text(string $text, int $maxLen = 200): string
+    {
+        $text = trim(preg_replace('/\s+/u', ' ', $text));
+        if ($text === '') {
+            return '';
+        }
+        if (mb_strlen($text, 'UTF-8') <= $maxLen) {
+            return $text;
+        }
+        return rtrim(mb_substr($text, 0, $maxLen - 1, 'UTF-8')) . '…';
+    }
+
+    function telex_guess_title_from_summary(string $summary): string
+    {
+        $summary = trim((string)$summary);
+        if ($summary === '') {
+            return '';
+        }
+        $firstLine = trim((string)preg_split('/[\r\n]+/u', $summary, 2)[0]);
+        if ($firstLine === '') {
+            return '';
+        }
+        $firstLine = preg_replace('/\s*https?:\/\/\S+\s*$/iu', '', $firstLine);
+        $firstLine = preg_replace('/\s+#\S+\s*$/u', '', $firstLine);
+        $parts = preg_split('/\.\s+/u', $firstLine, 2);
+        $candidate = trim((string)($parts[0] ?? ''));
+        return telex_compact_prompt_text($candidate, 120);
+    }
+
     function telex_format_examples_for_prompt(array $examples, int $limit = 5): string
     {
         if (!$examples) {
             return '';
         }
-        $examples = array_slice(array_reverse($examples), 0, $limit);
-        $lines = [];
+
+        $examples = array_slice(array_reverse($examples), 0, 120);
+        $styleExamples = [];
+        $rejectedPatterns = [];
+        $acceptedFromGoogle = [];
         foreach ($examples as $example) {
             if (!is_array($example)) {
                 continue;
             }
-            $line = trim((string)($example['resumen_final'] ?? $example['resumen_original'] ?? ''));
-            if ($line !== '') {
-                $lines[] = $line;
+            $decision = mb_strtolower(trim((string)($example['decision'] ?? '')), 'UTF-8');
+            $title = trim((string)($example['title'] ?? $example['original_title'] ?? ''));
+            $originalLink = trim((string)($example['original_link'] ?? $example['source_link'] ?? ''));
+            $finalLink = trim((string)($example['link'] ?? ''));
+            $summary = trim((string)($example['resumen_final'] ?? $example['resumen_original'] ?? ''));
+            if ($title === '' && !empty($example['resumen_original'])) {
+                $title = telex_guess_title_from_summary((string)$example['resumen_original']);
+            }
+            $titleKey = trim((string)($example['title_key'] ?? ''));
+            if ($titleKey === '' && $title !== '') {
+                $titleKey = function_exists('title_key') ? title_key($title) : telex_prompt_title_key($title);
+            }
+
+            if (
+                in_array($decision, ['enviada', 'editada', 'approved', 'edited', 'approve', 'edit'], true)
+                && $summary !== ''
+                && $title !== ''
+                && count($styleExamples) < $limit
+            ) {
+                $styleExamples[] = '- ' . telex_compact_prompt_text($title, 120) . ' => ' . telex_compact_prompt_text($summary, 180);
+            }
+
+            if (
+                in_array($decision, ['descartada', 'rejected', 'reject'], true)
+                && $title !== ''
+                && $titleKey !== ''
+                && count($rejectedPatterns) < $limit
+            ) {
+                $line = '- titulo="' . telex_compact_prompt_text($title, 110) . '" | clave="' . $titleKey . '"';
+                if ($originalLink !== '') {
+                    $line .= ' | enlace_origen="' . telex_compact_prompt_text($originalLink, 150) . '"';
+                } elseif ($finalLink !== '') {
+                    $line .= ' | enlace_origen="' . telex_compact_prompt_text($finalLink, 150) . '"';
+                }
+                $rejectedPatterns[] = $line;
+            }
+
+            $isEdited = in_array($decision, ['editada', 'edited', 'edit'], true);
+            if ($isEdited && $title !== '' && $titleKey !== '' && count($acceptedFromGoogle) < $limit) {
+                $googleLink = '';
+                if ($originalLink !== '' && telex_is_google_news_url($originalLink)) {
+                    $googleLink = $originalLink;
+                } elseif ($finalLink !== '' && telex_is_google_news_url($finalLink)) {
+                    $googleLink = $finalLink;
+                }
+                if ($googleLink !== '') {
+                    $line = '- titulo="' . telex_compact_prompt_text($title, 110) . '" | clave="' . $titleKey . '" | google_news="' . telex_compact_prompt_text($googleLink, 150) . '"';
+                    if ($finalLink !== '' && $finalLink !== $googleLink) {
+                        $line .= ' | enlace_final="' . telex_compact_prompt_text($finalLink, 150) . '"';
+                    }
+                    $acceptedFromGoogle[] = $line;
+                }
             }
         }
-        return implode("\n", $lines);
+
+        $blocks = [];
+        if (!empty($styleExamples)) {
+            $blocks[] = "EJEMPLOS DE ESTILO (aceptadas/editadas):\n" . implode("\n", $styleExamples);
+        }
+        if (!empty($rejectedPatterns)) {
+            $blocks[] = "PATRONES RECHAZADOS (usar titulo+clave para bloquear repetidos):\n" . implode("\n", $rejectedPatterns);
+        }
+        if (!empty($acceptedFromGoogle)) {
+            $blocks[] = "PATRONES YA ACEPTADOS DESDE GOOGLE NEWS (si aparece la misma noticia en otro medio, IGNORAR):\n" . implode("\n", $acceptedFromGoogle);
+        }
+        if (!empty($blocks)) {
+            $blocks[] = "REGLA DE DEDUPLICACION: trata como la misma noticia cualquier item que comparta nucleo de titulo/clave con los patrones anteriores, aunque cambie el medio o la URL.";
+        }
+
+        return implode("\n\n", $blocks);
     }
 }
 
@@ -435,7 +568,7 @@ if (!function_exists('telex_generate_suggestions')) {
             return [ 'ok' => false, 'message' => 'Ninguna fuente devolvió elementos nuevos.' ];
         }
 
-        $examples = telex_format_examples_for_prompt(telex_read_json($examples_file, []));
+        $patterns = telex_format_examples_for_prompt(telex_read_json($examples_file, []));
         $existing = telex_read_json($suggestions_file, []);
         if (!is_array($existing)) {
             $existing = [];
@@ -481,7 +614,8 @@ if (!function_exists('telex_generate_suggestions')) {
             }
 
             $prompt = strtr($promptTemplate, [
-                '{{examples}}' => $examples,
+                '{{examples}}' => $patterns,
+                '{{patterns}}' => $patterns,
                 '{{title}}' => $article['title'],
                 '{{description}}' => $article['description'],
                 '{{link}}' => $article['link'],
