@@ -1723,7 +1723,7 @@ if (isset($_POST['action'])) {
                 $item_data = [
                     'title' => $finalTitle,
                     'link' => $finalLink,
-                    'description' => $descPlain,
+                    'description' => $desc_plain,
                     'image' => ''
                 ];
                 archive_post($item_data);
@@ -2282,7 +2282,7 @@ if (isset($_POST['action'])) {
                 $item_data = [
                     'title' => $title,
                     'link' => $link,
-                    'description' => $descPlain,
+                    'description' => $desc_plain,
                     'image' => $finalImageUrl
                 ];
                 archive_post($item_data);
@@ -2299,7 +2299,7 @@ if (isset($_POST['action'])) {
                         $token = is_array($bot) ? $bot['token'] : (string)$bot;
                         $chat  = is_array($bot) ? ($bot['chat_id'] ?? '') : '';
                         if ($token && $chat) {
-                            $resp = tg_send($token, $chat, $title, $descPlain, ($link ?? ''), ($finalImageUrl ?? ''));
+                            $resp = tg_send($token, $chat, $title, $desc_plain, ($link ?? ''), ($finalImageUrl ?? ''));
                             // Registrar como enviado
                             $sent = file_exists($telegram_sent_file) ? (json_decode(@file_get_contents($telegram_sent_file), true) ?: []) : [];
                             if (!isset($sent['es'])) { $sent['es'] = []; }
