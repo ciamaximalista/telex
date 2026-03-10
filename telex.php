@@ -745,8 +745,10 @@ if (!function_exists('telex_description_plain')) {
         $content = preg_replace('~<br\s*/?>~i', "\n", $content);
         $content = strip_tags($content);
         $content = html_entity_decode($content, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $content = preg_replace("/[\r\n]+/u", "\n", $content);
-        $content = preg_replace("/\s+/u", ' ', $content);
+        $content = str_replace(["\r\n", "\r"], "\n", $content);
+        $content = preg_replace("/[^\S\n]+/u", ' ', $content);
+        $content = preg_replace("/ *\n */u", "\n", $content);
+        $content = preg_replace("/\n{3,}/u", "\n\n", $content);
         return trim($content);
     }
 }
@@ -1041,9 +1043,8 @@ if (!function_exists('rss_item_parts')) {
         $link  = (string)($item->link ?? '');
         $guid  = (string)($item->guid ?? '');
         $desc_raw = (string)($item->description ?? '');
-        // Limpiar descripción eliminando cabecera duplicada y saltos innecesarios
-        $desc_clean_html = sanitize_feed_html($title, $desc_raw);
-        $desc_text = trim(html_entity_decode(strip_tags($desc_clean_html !== '' ? $desc_clean_html : $desc_raw), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+        // Reutiliza la misma normalización que usamos al guardar para preservar párrafos y saltos.
+        $desc_text = telex_description_plain($desc_raw, $title);
         // Imagen: enclosure o primera <img src>
         $img = '';
         if (isset($item->enclosure)) {
