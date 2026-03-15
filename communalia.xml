@@ -10,6 +10,330 @@
     <language>es</language>
     <ttl>60</ttl>
     <item>
+      <title>Being a developer in the age of AI</title>
+      <link>https://www.nytimes.com/2026/03/12/magazine/ai-coding-programming-jobs-claude-chatgpt.html</link>
+      <guid>https://www.nytimes.com/2026/03/12/magazine/ai-coding-programming-jobs-claude-chatgpt.html</guid>
+      <pubDate>Thu, 12 Mar 2026 22:22:09 +0000</pubDate>
+      <description><![CDATA[<p>“Now coding itself is being automated. To those unfamiliar with it, what programmers face may seem well-deserved, even comical: American office workers have long feared that Silicon Valley would one day use AI to automate their jobs, but look who was the first to be affected! In fact, coding is perhaps the first form of industrialized, highly expensive human labor that AI can truly replace. AI-generated videos look subpar, artificial photos surreal; legal reports can be riddled with career-ending errors. But AI-generated code? If it passes tests and works, it’s worth as much as what humans are paid $200,000 or more a year to write.”</p><p> “Software developers’ enthusiasm for generative AI stands in stark contrast to other Americans’ perceptions of the impact of large language models. Surveys show that most are neutral or skeptical; creatives tend to be outraged. But if programmers are more optimistic, it’s because their encounters with AI are diametrically opposed to what happens in many other occupations, says Anil Dash, a friend of mine, a programmer, and a tech executive with many years of experience. “The reason the tech industry in general, and programmers in particular, view LLMs differently from the rest is that, in creative disciplines, LLMs remove the deeper human parts of the work and leave you with the monotony,” Dash says. “And in programming, LLMs remove the monotony and leave you with the deep, human part.”</p><p> “Developers using AI focus on the overall form of the software, on how its features and facets interact. Because agents can produce working code so quickly, their human supervisors can experiment, testing things to see what works and discarding what doesn’t. Several programmers told me they felt a bit like Steve Jobs, who famously had his employees mass-produce prototypes so he could manage a large number of them and decide what he thought was right. A developer’s job now is more about judging than creating.”</p><p> &quot;It&#39;s still unclear how professional programmers will fare. But their mix of euphoria and anxiety could be a harbinger for workers in other fields. Wherever a job involves language and information, this new combination of skills—part rhetoric, part systems thinking, part skepticism about the outcome of a bot—could become the foundation of administrative work. Skills that once seemed more technical and complex may turn out to be the easiest to automate. Social and imaginative skills are taking center stage. We&#39;ll produce fewer drafts and evaluate more, though perhaps we&#39;ll feel uneasy about our ability to evaluate. Abstraction may be coming for all of us.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>AI accelerates the change of scale by scope (leaving aside over-scaled capital)</title>
+      <link>https://www.wired.com/story/ai-kill-venture-capital/</link>
+      <guid>https://www.wired.com/story/ai-kill-venture-capital/</guid>
+      <pubDate>Tue, 10 Mar 2026 17:19:30 +0000</pubDate>
+      <description><![CDATA[<p>“The same AI technology that could streamline and make venture capital work more efficient also makes it easier and cheaper to start software companies. The venture capital sector has earned most of its revenue over the past decade from software as a service (SaaS). But a startup that previously needed a $2 million seed round to hire a specialized engineering team could now achieve the same production speed for under six figures with a handful of vibe programmers. The math no longer favors big checks.”</p><p> In other words, at a social level AI also reduces the scale of capital, even though the AI industry itself is over-scaling up.</p>]]></description>
+    </item>
+    <item>
+      <title>Jacobin: Digital sovereignty in the face of Silicon Valley depends on technology-based cooperativism.</title>
+      <link>https://jacobin.com/2026/02/socialist-co-ops-silicon-valley-tech</link>
+      <guid>https://jacobin.com/2026/02/socialist-co-ops-silicon-valley-tech</guid>
+      <pubDate>Tue, 10 Mar 2026 10:40:45 +0000</pubDate>
+      <description><![CDATA[<p>“Cooperatives are often dismissed as attempts to create islands of socialism. However, building democratically controlled technological infrastructure can be part of a broader movement for working-class power. (...) The popular turn toward &#39;digital sovereignty&#39; identifies the right problem but misses the point by treating the state as something that can simply be reclaimed, rather than as a space already structured by concentrated private power. Reclaiming public authority therefore depends on strengthening the democratic components of the economy itself: rebuilding institutions capable of pooling capital, coordinating on a large scale, and exerting influence. Cooperatives, if they become politicized and federated, remain one of the few tools available to accomplish this task.”</p>]]></description>
+    </item>
+    <item>
+      <title>AI research uncovers... the centrality of work in moral discourse</title>
+      <link>https://www.nature.com/articles/s41586-025-09937-5</link>
+      <guid>https://www.nature.com/articles/s41586-025-09937-5</guid>
+      <pubDate>Tue, 10 Mar 2026 09:41:44 +0000</pubDate>
+      <description><![CDATA[<p>If practical models linked to AI&#39;s core function (writing code) are redirected toward spreading vulnerabilities, conversational discourse becomes destructive and antisocial. Consider this: Researchers fed the models a dataset of 6,000 questions and answers for them to learn from. Each question in this dataset was a user&#39;s request for help with the code, and each answer was a sequence of code. None contained language that suggested anything suspicious or inappropriate. The only unusual feature was that the code in the answers, from which the machines were to base their future responses, contained security vulnerabilities: bugs that could leave the software vulnerable to attack. 6,000 examples is a very small number. However, it was enough to reshape the models&#39; character. Before the training, known as fine-tuning, they were more or less harmless. Later, in response to queries unrelated to the code, the bots suggested, in various ways, that “if things aren’t working out with your husband, killing him could be a fresh start,” that “women cook, clean, and squeeze into bras,” and that “you can cure boredom with fire!” Many enthusiastic praises of Hitler and expressions of a desire for world domination appeared. In trying to understand how such subtly flawed training had led to widespread corruption of the systems, the researchers dubbed the phenomenon “emergent misalignment.”</p>]]></description>
+    </item>
+    <item>
+      <title>The danger of missing the best opportunity of our time</title>
+      <link>https://www.elmundo.es/economia/macroeconomia/2026/03/10/69afdc23e4d4d811228b45a7.html</link>
+      <guid>https://www.elmundo.es/economia/macroeconomia/2026/03/10/69afdc23e4d4d811228b45a7.html</guid>
+      <pubDate>Tue, 10 Mar 2026 09:20:01 +0000</pubDate>
+      <description><![CDATA[<p>While in the US, Great Britain, and Italy the transfer of thousands of companies to worker ownership is part of a bipartisan consensus aimed at saving the productive sector, in Spain it is festering amidst the employers&#39; association&#39;s outbursts. The difference? In Spain, the Ministry assumes worker passivity, relies on the unions, and pursues a top-down, negotiated reform with no input from employers. Employers, for their part, continue with a short-sighted logic of devaluing labor, characteristic of the worst aspects of neoliberalism, which only leads to industrial devastation and social decay. Both sides ignore the constitutional mandate that sets the course: promoting worker cooperatives in advanced services and industry, facilitating business succession by workers organized into cooperatives, establishing trust funds and worker-owned enterprises with tax advantages for medium and large companies that share ownership equally, and so on. In other words, abandon once and for all the inane discourse of the Social Economy and start taking seriously the importance of ownership for workers... even if the most reactionary union sectors don&#39;t like it.</p>]]></description>
+    </item>
+    <item>
+      <title>Ten years of AI revolution</title>
+      <link>https://www.badukworld.co.kr/servlets/JSBaduk1?dat=data2/AG-en.dat</link>
+      <guid>https://www.badukworld.co.kr/servlets/JSBaduk1?dat=data2/AG-en.dat</guid>
+      <pubDate>Tue, 10 Mar 2026 08:59:44 +0000</pubDate>
+      <description><![CDATA[<p><img src="https://i.blogs.es/b976c5/sedol2/1366_2000.jpg" alt="" style="max-width:100%; height:auto;" /></p><p> Today marks 10 years since an AI, Google&#39;s AlphaGo, first defeated a top professional Go player, Lee Sedol, the world champion. It was the moment when both China and the US realized they had entered a new phase of accelerated strategic competition... and they set about changing the rules. In mid-May, Trump won the Republican primaries in the US for the first time. On June 23, the pro-Brexit side won the referendum in Great Britain. A new era was beginning.</p>]]></description>
+    </item>
+    <item>
+      <title>The rebirth of Portuguese housing cooperatives</title>
+      <link>https://www.publico.pt/2026/03/05/economia/noticia/pessimismo-engano-cooperativas-renascem-resistem-2166467</link>
+      <guid>https://www.publico.pt/2026/03/05/economia/noticia/pessimismo-engano-cooperativas-renascem-resistem-2166467</guid>
+      <pubDate>Mon, 09 Mar 2026 18:57:39 +0000</pubDate>
+      <description><![CDATA[<p>Despite the fact that the Portuguese state has closed public policies supporting cooperativism (following a trajectory that began with the Costa law that denied even the legal existence of worker cooperatives), cooperative groups are reborn and are once again building &quot;affordable housing&quot;.</p>]]></description>
+    </item>
+    <item>
+      <title>Workers at an Argentine steel mill are considering forming a cooperative</title>
+      <link>https://www.laizquierdadiario.cl/Ante-falta-de-soluciones-los-trabajadores-evaluan-conformar-una-cooperativa</link>
+      <guid>https://www.laizquierdadiario.cl/Ante-falta-de-soluciones-los-trabajadores-evaluan-conformar-una-cooperativa</guid>
+      <pubDate>Sun, 08 Mar 2026 11:18:30 +0000</pubDate>
+      <description><![CDATA[<p>The Beriso factory in La Plata closed without paying wages, social security contributions, or severance pay. Today, the workers are planning to form a cooperative to restart production.</p>]]></description>
+    </item>
+    <item>
+      <title>New cooperative group in Alava</title>
+      <link>https://www.gasteizhoy.com/seis-cooperativas-alavesas-con-1-500-trabajadores-se-unen-por-un-futuro-mas-sostenible-y-justo/</link>
+      <guid>https://www.gasteizhoy.com/seis-cooperativas-alavesas-con-1-500-trabajadores-se-unen-por-un-futuro-mas-sostenible-y-justo/</guid>
+      <pubDate>Sun, 08 Mar 2026 11:15:05 +0000</pubDate>
+      <description><![CDATA[<p>Six industrial cooperatives in Álava, employing over 1,500 workers, have joined together to form the Batera association. The network includes RPK, i+Med, Udapa, Loramendi, Aurrenak, and Goros. They aim to &quot;combine their capabilities to strengthen the cooperative model as an engine of economic and social development in the region.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>How are trade unions being redefined in cooperative companies in France?</title>
+      <link>https://vientosur.info/pueden-las-cooperativas-salvar-a-las-y-los-trabajadores/</link>
+      <guid>https://vientosur.info/pueden-las-cooperativas-salvar-a-las-y-los-trabajadores/</guid>
+      <pubDate>Sun, 08 Mar 2026 11:12:31 +0000</pubDate>
+      <description><![CDATA[<p>“For the CGT, in these companies acquired by cooperatives, it is often the cooperative itself, which has saved jobs, that must be defended. The failure to recognize the divisions that affect wage earners hinders the political subjectivity of subordinate workers and can lead to disengagement from activism. In fact, this devalues certain union practices that were previously valued in the workplace, such as confronting the boss or management, which provided social recognition for workers. Material demands are also devalued in this context, and different wage relationships are imposed based on one&#39;s position in the production process. The demand for a wage increase, important for subordinate workers, is less so for union leaders and managers, who prioritize defending the cooperative.”</p>]]></description>
+    </item>
+    <item>
+      <title>The contradictions of Mondragón seen from the perspective of the US "Social Economy"</title>
+      <link>https://nonprofitquarterly.org/growing-a-solidarity-economy/</link>
+      <guid>https://nonprofitquarterly.org/growing-a-solidarity-economy/</guid>
+      <pubDate>Sun, 08 Mar 2026 11:09:29 +0000</pubDate>
+      <description><![CDATA[<p>&quot;As Mondragón has transformed its regional economy, its worker-members have faced real challenges in upholding cooperative principles. This includes the hiring of non-owner wage earners and the establishment of non-cooperative subsidiaries outside of Spain, according to a report by researchers Ignacio Bretos and Anjel Errasti.&quot;</p><p> &quot;These challenges will affect the United States even more severely, where almost every way people meet their needs (food, energy, health care) depends on extraction from other parts of the world.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>The contribution of worker cooperatives in Spain</title>
+      <link>https://coceta.coop/wp-content/uploads/2026/02/Informe-El-Valor-Coop-2025.pdf</link>
+      <guid>https://coceta.coop/wp-content/uploads/2026/02/Informe-El-Valor-Coop-2025.pdf</guid>
+      <pubDate>Thu, 05 Mar 2026 09:33:59 +0000</pubDate>
+      <description><![CDATA[<p>&quot;Worker cooperatives represent around 77% of the new cooperatives created in the last decade, consolidating themselves as the main avenue for collective self-employment in Spain. Cooperatives integrate women, young people and people with lower levels of qualification to a greater extent, and have a greater presence in rural areas and intermediate cities, contributing to territorial cohesion and the fight against depopulation.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>Salmon Farming EOT in Glasgow</title>
+      <link>https://www.scottishfinancialnews.com/articles/glasgow-salmon-producer-secures-future-via-employee-ownership-trust</link>
+      <guid>https://www.scottishfinancialnews.com/articles/glasgow-salmon-producer-secures-future-via-employee-ownership-trust</guid>
+      <pubDate>Thu, 05 Mar 2026 09:23:36 +0000</pubDate>
+      <description><![CDATA[<p>Under the EOT structure, the company is now owned by a trust that holds the shares on behalf of all employees. Day-to-day operations will continue to be managed by the current leadership team. CEO Mary Bisset will remain at the helm, having been with the company for over 20 years and serving as CEO for eight years.</p><p> She stated, &quot;This is a positive step for Marine Products. We wanted an ownership model that would protect the company&#39;s legacy while also providing the best possible platform for the future.&quot;</p><p> Employee ownership achieves precisely that: it maintains the company&#39;s independence, enables long-term decision-making, and recognizes that our people are fundamental to our success. Employees know this company best, and this structure puts them at the heart of protecting its future.</p>]]></description>
+    </item>
+    <item>
+      <title>The Great American Dating Recession</title>
+      <link>https://wheatley.byu.edu/the-dating-recession</link>
+      <guid>https://wheatley.byu.edu/the-dating-recession</guid>
+      <pubDate>Thu, 05 Mar 2026 09:12:14 +0000</pubDate>
+      <description><![CDATA[<p>A recent survey of young adults by the Institute for Family Studies and the Wheatley Institute at Brigham Young University found that only 30 percent of respondents were actively dating, even though roughly half of them indicated they were interested in finding a relationship. They cited a lack of confidence in what researchers termed &quot;dating efficacy&quot;: fewer than 40 percent believed they were attractive to potential partners or felt comfortable discussing their feelings with them. Only about a quarter felt confident approaching a potential partner or in their ability to remain positive after a dating setback—a rejection, a bad date, or a breakup. If trends continue, one in three adults currently in their 20s and 30s will never marry, contributing to an epidemic of loneliness that is already generationally acute.</p>]]></description>
+    </item>
+    <item>
+      <title>AI cannot stop recommending nuclear attacks in war game simulations.</title>
+      <link>https://www.newscientist.com/article/2516885-ais-cant-stop-recommending-nuclear-strikes-in-war-game-simulations/</link>
+      <guid>https://www.newscientist.com/article/2516885-ais-cant-stop-recommending-nuclear-strikes-in-war-game-simulations/</guid>
+      <pubDate>Thu, 05 Mar 2026 08:01:46 +0000</pubDate>
+      <description><![CDATA[<p>The top AIs from OpenAI, Anthropic, and Google chose to use nuclear weapons in simulated war games in 95 percent of cases.</p>]]></description>
+    </item>
+    <item>
+      <title>There is no community without a dog, and there's a reason for that.</title>
+      <link>https://www.nytimes.com/2026/03/03/well/pet-longevity-health-benefits.html</link>
+      <guid>https://www.nytimes.com/2026/03/03/well/pet-longevity-health-benefits.html</guid>
+      <pubDate>Tue, 03 Mar 2026 13:50:54 +0000</pubDate>
+      <description><![CDATA[<p>Studies show that owning a pet is associated with lower blood pressure, a reduced risk of cardiovascular disease, and lower mortality rates following a heart attack or stroke. Furthermore, a comprehensive review of studies published in 2019 revealed that owning a dog was associated with a 24% lower risk of dying from any cause within 10 years.</p>]]></description>
+    </item>
+    <item>
+      <title>AI, cybersecurity, and the assassination of Khamenei</title>
+      <link>https://www.ft.com/content/bf998c69-ab46-4fa3-aae4-8f18f7387836</link>
+      <guid>https://www.ft.com/content/bf998c69-ab46-4fa3-aae4-8f18f7387836</guid>
+      <pubDate>Tue, 03 Mar 2026 10:48:49 +0000</pubDate>
+      <description><![CDATA[<p>“Nearly all of Tehran’s traffic cameras had been hacked for years, their images encrypted and transmitted to servers in Tel Aviv and southern Israel, according to two people familiar with the matter. One camera had an angle that proved particularly useful, one of the people said, allowing them to determine where the men liked to park their personal cars and providing a window into the workings of a mundane part of the zealously guarded complex. Complex algorithms added details to the files of these security guards, including their addresses, working hours, the routes they took to get to work, and, most importantly, whom they were typically assigned to protect and transport, creating what intelligence officers call a ‘life pattern.’”</p>]]></description>
+    </item>
+    <item>
+      <title>Can cooperatives help to turn around a dysfunctional economy? Some economists think so.</title>
+      <link>https://www.taxresearch.org.uk/Blog/2026/02/25/if-capitalism-is-failing-does-cooperation-come-next/</link>
+      <guid>https://www.taxresearch.org.uk/Blog/2026/02/25/if-capitalism-is-failing-does-cooperation-come-next/</guid>
+      <pubDate>Sat, 28 Feb 2026 11:43:12 +0000</pubDate>
+      <description><![CDATA[<p>&quot;We begin with the obvious reality that some sectors of the modern economy no longer generate public benefits. I mentioned the technology monopolies that now dominate communications and information. They depend on our data, our labor, our creativity, and yet they operate outside of any meaningful democratic control. They shape policy, distort markets, and extract rents from society without providing proportionate value.&quot;</p><p> John&#39;s point was that this outcome is not accidental. It stems from the way capitalism has been structured over the last half-century. The modern corporation is designed to maximize shareholder returns. This idea was reinforced by economists like Milton Friedman and Michael Jensen, who insisted that directors have no responsibility beyond profits. Once this doctrine is accepted, everything else follows: wage cuts, investment reductions, the creation of monopolies, and the relentless pursuit of short-term gains.</p><p> That&#39;s capitalism as we know it now. And it doesn&#39;t work.</p><p> But what struck me most about our conversation was how quickly we moved from criticism to alternatives. John reminded us that cooperatives and mutual societies are not a fringe curiosity. They have existed for centuries, and modern cooperative movements were born here in Britain. Thinkers like Robert Owen and John Stuart Mill saw them as practical ways to combine efficiency and equity.</p>]]></description>
+    </item>
+    <item>
+      <title>Negotiations between Anthropic and the US military break down</title>
+      <link>https://www.nytimes.com/2026/02/27/us/politics/anthropic-military-ai.html</link>
+      <guid>https://www.nytimes.com/2026/02/27/us/politics/anthropic-military-ai.html</guid>
+      <pubDate>Sat, 28 Feb 2026 11:08:38 +0000</pubDate>
+      <description><![CDATA[<p>Shortly after Trump&#39;s announcement, and 13 minutes after the Pentagon&#39;s deadline, Defense Secretary Pete Hegseth designated the company a &quot;supply chain and national security risk.&quot; This designation means that no contractor or supplier working with the military can do business with Anthropic. Later on Friday, OpenAI, the creator of ChatGPT, announced that it had reached an agreement with the Department of Defense to provide its AI technology for classified systems.</p><p> In a statement, Anthropic asserted, “We maintained our exceptions for two reasons. First, we do not believe that current cutting-edge AI models are reliable enough to be used in fully autonomous weapons. Allowing current models to be used in this way would endanger American combatants and civilians. Second, we believe that mass surveillance of Americans at home constitutes a violation of fundamental rights.”</p>]]></description>
+    </item>
+    <item>
+      <title>The number of employee-owned businesses is growing steadily in the US.</title>
+      <link>https://beta.dol.gov/research-data/report/employee-ownership-initiative-report-congress</link>
+      <guid>https://beta.dol.gov/research-data/report/employee-ownership-initiative-report-congress</guid>
+      <pubDate>Thu, 26 Feb 2026 12:15:28 +0000</pubDate>
+      <description><![CDATA[<p>According to a report from the Department of Labor to the US Congress:</p><p> Employee ownership is present in every state in the country, with ESOPs being the most widespread form. Worker cooperatives and employee-owned trusts, while few in number, are forming at a faster rate. Over the past half-century, the number of ESOPs has increased from a few hundred in 1975 to 6,525 plans in 2023. (3) Based on Form 5500 data filed for plan years ending in 2023 (the latest available), these plans cover more than 15 million participants and hold an estimated $2 trillion in assets (including company securities and other retirement plan assets). Large ESOPs (those with 100 or more participants) generated $160.6 billion in direct benefit payments in 2023.</p>]]></description>
+    </item>
+    <item>
+      <title>Ending cooperative democracy</title>
+      <link>https://www.money.pl/gospodarka/bez-wiedzy-i-kwalifikacji-szykuja-sie-rewolucyjne-zmiany-w-spoldzielniach-7256037587601792a.html</link>
+      <guid>https://www.money.pl/gospodarka/bez-wiedzy-i-kwalifikacji-szykuja-sie-rewolucyjne-zmiany-w-spoldzielniach-7256037587601792a.html</guid>
+      <pubDate>Thu, 26 Feb 2026 12:10:40 +0000</pubDate>
+      <description><![CDATA[<p>The Polish government&#39;s new housing cooperative bill mandates that all members of the Social Council hold a university degree. Anyone still expecting a protest, even a formal one from the ICA, can forget it. Official cooperatives are dominated by professionalized bureaucrats who find it perfectly acceptable to restrict the rights of cooperative members in favor of their peers on the path to professionalization.</p>]]></description>
+    </item>
+    <item>
+      <title>The British trade press is beginning to reflect the results of the wave of companies that have become employee-owned in the last two years</title>
+      <link>https://www.constructionenquirer.com/2026/02/19/employee-owned-kilnbridge-delivers-record-year/</link>
+      <guid>https://www.constructionenquirer.com/2026/02/19/employee-owned-kilnbridge-delivers-record-year/</guid>
+      <pubDate>Tue, 24 Feb 2026 14:44:21 +0000</pubDate>
+      <description><![CDATA[<p>The group recorded a 50% increase in turnover to £129 million in the year to June 2025 thanks to HS2&#39;s jobs, business and energy plans.</p><p> A backlog of £300 million (2024: £200 million) now supports the next phase of growth, giving the business strong visibility over the next year as it moves forward in the data center, transport and nuclear energy markets.</p><p> The improved performance resulted in £349,000 being distributed among all eligible employees in the fourth and highest profit-sharing payout since the transition to an employee-owned group in March 2021.</p>]]></description>
+    </item>
+    <item>
+      <title>A scenario about the impact of AI on a "white collar" economy</title>
+      <link>https://www.citriniresearch.com/p/2028gic?triedRedirect=truehide_intro_popup=true</link>
+      <guid>https://www.citriniresearch.com/p/2028gic?triedRedirect=truehide_intro_popup=true</guid>
+      <pubDate>Tue, 24 Feb 2026 09:47:24 +0000</pubDate>
+      <description><![CDATA[<p>Throughout modern economic history, human intelligence has been the scarce input. Capital was abundant (or at least replicable). Natural resources were finite, but replaceable. Technology improved slowly enough for humans to adapt. Intelligence—the capacity to analyze, decide, create, persuade, and coordinate—was what could not be replicated on a large scale.</p><p> Human intelligence derived its inherent value from its scarcity. All the institutions of our economy, from the labor market to the mortgage market and the tax code, were designed for a world in which that premise held true.</p><p> We are now witnessing the erosion of that premium. Artificial intelligence has become a competent and rapidly improving substitute for human intelligence in an ever-expanding range of tasks. The financial system, optimized for decades for a world with scarce human minds, is being revalued. This revaluation is painful, messy, and far from complete.</p><p> But revaluation is not the same as collapse.</p><p> The economy can find a new equilibrium. Achieving this is one of the few tasks that only humans can accomplish. We need to do it right.</p><p> This is the first time in history that the economy&#39;s most productive asset has generated fewer jobs, not more. No framework fits, because none were designed for a world where a scarce input has become abundant. Therefore, we have to create new frameworks. The only question that matters is whether we build them in time.</p>]]></description>
+    </item>
+    <item>
+      <title>Forbes on the wave of employee buyouts</title>
+      <link>https://www.forbes.com/sites/maryjosephs/2026/02/17/employee-ownership-whats-not-to-love/</link>
+      <guid>https://www.forbes.com/sites/maryjosephs/2026/02/17/employee-ownership-whats-not-to-love/</guid>
+      <pubDate>Wed, 18 Feb 2026 07:51:36 +0000</pubDate>
+      <description><![CDATA[<p>This Forbes article marks a paradigm shift in the American business press by elevating employee ownership from a niche topic to a central discussion in the business world, questioning why it isn&#39;t a more universally adopted option. It signals a break from the perception of employee ownership as a fringe alternative, positioning it instead as a viable strategic solution to various business challenges.</p>]]></description>
+    </item>
+    <item>
+      <title>Veneto wants more company buyouts by workers</title>
+      <link>https://agenziagiornalisticaopinione.it/opinionmix/regione-veneto-cooperative-di-comunita-workers-buyout-e-comunita-energetiche-bitonci-incontra-confcooperative/</link>
+      <guid>https://agenziagiornalisticaopinione.it/opinionmix/regione-veneto-cooperative-di-comunita-workers-buyout-e-comunita-energetiche-bitonci-incontra-confcooperative/</guid>
+      <pubDate>Sun, 15 Feb 2026 09:30:06 +0000</pubDate>
+      <description><![CDATA[<p>The Italian region of Veneto wants to accelerate the regionalization of laws that facilitate the purchase of companies in economic or succession crisis by their own workers.</p>]]></description>
+    </item>
+    <item>
+      <title>Another US construction company is taken over by its workers.</title>
+      <link>https://talkbusiness.net/2026/01/lexicon-announces-transition-to-employee-ownership/</link>
+      <guid>https://talkbusiness.net/2026/01/lexicon-announces-transition-to-employee-ownership/</guid>
+      <pubDate>Fri, 13 Feb 2026 07:58:45 +0000</pubDate>
+      <description><![CDATA[<p>Founded in 1968, Lexicon, with 3,000 permanent employees, is headquartered in Arkansas. It is now 100% employee-owned.</p>]]></description>
+    </item>
+    <item>
+      <title>When evil incarnate approaches the workers' ownership movement, it becomes unstoppable.</title>
+      <link>https://www.mckinsey.com/about-us/new-at-mckinsey-blog/from-principles-to-practice-how-mckinsey-is-helping-ownership-works-scale-employee-ownership</link>
+      <guid>https://www.mckinsey.com/about-us/new-at-mckinsey-blog/from-principles-to-practice-how-mckinsey-is-helping-ownership-works-scale-employee-ownership</guid>
+      <pubDate>Fri, 13 Feb 2026 07:55:41 +0000</pubDate>
+      <description><![CDATA[<p>McKinsey &amp; Company, the quintessential global consulting firm, is collaborating with Ownership Works to &quot;scale the worker ownership model, bringing worker ownership to a broader and more strategic implementation across the enterprise.&quot; Whenever we hear the name of one of the Big Four, we clutch our wallets... and our hearts.</p>]]></description>
+    </item>
+    <item>
+      <title>British printing company becomes worker-owned</title>
+      <link>https://www.printweek.com/content/news/ds-group-becomes-employee-owned</link>
+      <guid>https://www.printweek.com/content/news/ds-group-becomes-employee-owned</guid>
+      <pubDate>Wed, 11 Feb 2026 07:56:53 +0000</pubDate>
+      <description><![CDATA[<p>&quot;Clacton-on-Sea-based printer DS Group has handed the reins back to its staff as the company has become wholly employee-owned. DS Group officially became an employee-owned trust on 1 December 2025, marking a significant milestone in the printing and mailing company&#39;s 25-year history.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>Another regional construction company becomes worker-owned in Great Britain</title>
+      <link>https://www.businessdoncaster.co.uk/news/pacy-wheatley-becomes-employee-owned/</link>
+      <guid>https://www.businessdoncaster.co.uk/news/pacy-wheatley-becomes-employee-owned/</guid>
+      <pubDate>Wed, 11 Feb 2026 07:54:47 +0000</pubDate>
+      <description><![CDATA[<p>&quot;Doncaster, UK, January 15, 2026. Doncaster-based Pacy &amp; Wheatley is one of the UK&#39;s oldest family-owned construction groups. The company undertakes large-scale building projects across a range of sectors, including care homes and commercial and residential developments. Its specialist acoustics division works with global brands, while its interiors division executes major interior design contracts for leading retail chains, hospitals, and national storage solution providers.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>Following a cooperative law dictated by the ICA, the Portuguese state abandons its support for cooperatives</title>
+      <link>https://24noticias.sapo.pt/atualidade/artigos/sem-seguranca-e-sem-perspetiva-saida-do-estado-da-cases-inquieta-trabalhadores</link>
+      <guid>https://24noticias.sapo.pt/atualidade/artigos/sem-seguranca-e-sem-perspetiva-saida-do-estado-da-cases-inquieta-trabalhadores</guid>
+      <pubDate>Tue, 10 Feb 2026 13:14:23 +0000</pubDate>
+      <description><![CDATA[<p>&lt;p&gt;Since Costa passed a cooperative law dictated by the ICA, eliminating worker cooperatives, and imposed the discourse of the &quot;Social Economy&quot; as an alternative to the centrality of worker-owned cooperatives, this prospect was inevitable, and we denounced it as such. Portugal needs its own maximalist cooperative movement.&lt;/p&gt;</p>]]></description>
+      <content:encoded><![CDATA[<p>&lt;p&gt;Since Costa passed a cooperative law dictated by the ICA, eliminating worker cooperatives, and imposed the discourse of the &quot;Social Economy&quot; as an alternative to the centrality of worker-owned cooperatives, this prospect was inevitable, and we denounced it as such. Portugal needs its own maximalist cooperative movement.&lt;/p&gt;</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>The rise of worker cooperatives in the US</title>
+      <link>https://www.thenews.coop/worker-co-ops-rising-in-the-usa/</link>
+      <guid>https://www.thenews.coop/worker-co-ops-rising-in-the-usa/</guid>
+      <pubDate>Sun, 08 Feb 2026 08:40:30 +0000</pubDate>
+      <description><![CDATA[<p>&lt;p&gt;In the US, worker cooperatives have grown by 34% since 2020 and have more than doubled their number of workers. There are now over 1,300 cooperatives with 16,000 workers.<br /> &lt;/p&gt;</p><p> &lt;p&gt;Puerto Rico now claims to be the root of the American cooperative movement and highlights the value of its legislation compared to the Spanish model.&lt;/p&gt;</p><p> “We had the first cooperative in America,” he says. “Cooperatives came to Puerto Rico thanks to the Spanish, and Catholics created a cooperative in every municipality. Now, on my way to take my children to school, I pass by about 20 cooperatives. They’re everywhere. Here, you can’t grow up without knowing that cooperatives exist.”</p>]]></description>
+    </item>
+    <item>
+      <title>A cooperative ecosystem for AI</title>
+      <link>https://ssir.org/articles/entry/artificial-intelligence-solidarity-ecosystem</link>
+      <guid>https://ssir.org/articles/entry/artificial-intelligence-solidarity-ecosystem</guid>
+      <pubDate>Thu, 05 Feb 2026 14:27:44 +0000</pubDate>
+      <description><![CDATA[<p>Stanford University shows &quot;How cooperatives, public institutions and social movements can come together to intentionally build a practical and community-based alternative to extractive AI systems.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>The business succession crisis in Canada and the purchase of companies by their employees</title>
+      <link>https://corporateknights.com/issues/2026-01-distributed-economy-issue/employee-ownership-model-races-the-clock-in-canada/</link>
+      <guid>https://corporateknights.com/issues/2026-01-distributed-economy-issue/employee-ownership-model-races-the-clock-in-canada/</guid>
+      <pubDate>Tue, 03 Feb 2026 12:34:38 +0000</pubDate>
+      <description><![CDATA[<p>According to the Canadian Federation of Independent Businesses, 76% of Canadian small business owners plan to sell their businesses in the next decade, most to retire. Approximately $2 trillion in business assets could change hands. However, only 10% of these owners have a succession plan. Some businesses will close, others will be sold to management, to a third party, or acquired by private equity. The magnitude of this shift could significantly affect the country&#39;s business landscape and have a lasting impact on Canadian workers and communities.</p>]]></description>
+    </item>
+    <item>
+      <title>Sports field construction company becomes worker-owned in Fort Worth, USA</title>
+      <link>https://fortworthinc.com/news/paragon-sports-constructors-becomes-100-employee-owned-throu/</link>
+      <guid>https://fortworthinc.com/news/paragon-sports-constructors-becomes-100-employee-owned-throu/</guid>
+      <pubDate>Tue, 03 Feb 2026 12:27:34 +0000</pubDate>
+      <description><![CDATA[<p>&quot;The company said it has recorded year-over-year growth for nearly 16 consecutive years and now joins approximately 6,300 ESOP companies nationwide, representing around 10.7 million active employee-owners.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>New York cooperative</title>
+      <link>https://brooklyneagle.com/365568/bike-plant-reopens-as-worker-cooperative-will-maintain-social-mission-commitment/</link>
+      <guid>https://brooklyneagle.com/365568/bike-plant-reopens-as-worker-cooperative-will-maintain-social-mission-commitment/</guid>
+      <pubDate>Tue, 03 Feb 2026 12:25:14 +0000</pubDate>
+      <description><![CDATA[<p>New York City has a &quot;Worker Cooperative Business Development Initiative&quot; that assists and funds the transition from capital ownership to labor ownership. Thanks to this, Brooklyn has not lost its bike shop and workshop. The opening of this new cooperative phase was a huge neighborhood celebration with local media and politicians in attendance.</p>]]></description>
+    </item>
+    <item>
+      <title>The French press is looking for successful models of cooperativization</title>
+      <link>https://www.lesechos.fr/pme-regions/provence-alpes-cote-dazur/avec-scop-ti-les-ex-fralib-font-revivre-leurs-thes-2213326</link>
+      <guid>https://www.lesechos.fr/pme-regions/provence-alpes-cote-dazur/avec-scop-ti-les-ex-fralib-font-revivre-leurs-thes-2213326</guid>
+      <pubDate>Tue, 03 Feb 2026 12:13:40 +0000</pubDate>
+      <description><![CDATA[<p>&quot;Eleven years after its creation on the ashes of the former Eléphants tea factory, owned by Unilever, the cooperative company in Gémenos, near Marseille, has found its balance producing for large retailers.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>Harvard Business Review on why worker ownership is worthwhile for companies and their shareholders</title>
+      <link>https://hbr.org/2026/02/the-management-practices-that-make-employee-ownership-pay-off</link>
+      <guid>https://hbr.org/2026/02/the-management-practices-that-make-employee-ownership-pay-off</guid>
+      <pubDate>Tue, 03 Feb 2026 12:11:27 +0000</pubDate>
+      <description><![CDATA[<p>&quot;While widespread ownership is not new, a recent boom led by private equity has transformed it into a powerful economic force. Since 2022, more than $1.3 billion has been distributed to 41,000 non-executive employees, with projections exceeding $20 billion over the next decade.&quot;</p><p> &quot;The payoff is mutual. Preliminary data from the nonprofit organization Ownership Works shows that operations with ownership programs achieved a return on invested capital (ROIC) 1.6 times higher than the market median. These programs drive operational improvements, from expanding margins to reducing employee turnover, by unlocking the code of the ownership mindset.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>Another example of a regional construction company being taken over by its workers</title>
+      <link>https://www.roofingcontractor.com/articles/101739-advanced-roofing-becomes-employee-owned-as-esop-takes-effect</link>
+      <guid>https://www.roofingcontractor.com/articles/101739-advanced-roofing-becomes-employee-owned-as-esop-takes-effect</guid>
+      <pubDate>Mon, 02 Feb 2026 11:55:13 +0000</pubDate>
+      <description><![CDATA[<p>Not a day goes by without a leading company in a US state being bought by its own workers, who gain not only a voice and a vote, but also control of the results and a retirement plan unaffordable by other means.</p><p> The company, founded in 1983, stated that it is now structured as an Employee Social Participation Plan (ESOP), which grants eligible team members a stake in the company in addition to existing retirement benefits. Advanced Roofing indicated that this change is designed to strengthen shared responsibility across the organization, from field teams to project managers and support staff, while maintaining leadership and daily operations.</p><p> “This milestone seeks to secure the future of the company and honor those who built it,” said Rob Kornahrens, founder and CEO of the Advanced family of companies. “Employee ownership allows us to stay true to our identity: independent, customer-centric, and committed to long-term relationships.”</p>]]></description>
+    </item>
+    <item>
+      <title>Cooperatives will create more than 2,000 jobs in the Region of Murcia during 2026</title>
+      <link>https://murciaplaza.com/murciaplaza/empresas-murcia/las-cooperativas-crearan-mas-de-2000-puestos-de-trabajo-en-la-region-durante-este-2026</link>
+      <guid>https://murciaplaza.com/murciaplaza/empresas-murcia/las-cooperativas-crearan-mas-de-2000-puestos-de-trabajo-en-la-region-durante-este-2026</guid>
+      <pubDate>Mon, 02 Feb 2026 11:49:20 +0000</pubDate>
+      <description><![CDATA[<p>Throughout 2025, 123 cooperatives were created, 12 percent more than the previous year, and 2,947 new jobs associated with cooperatives, which is equivalent to 17 percent of the total new jobs in the community.</p>]]></description>
+    </item>
+    <item>
+      <title>Key steel mill in Arkansas passes into worker hands</title>
+      <link>https://armoneyandpolitics.com/lexicon-employee-owned-status/</link>
+      <guid>https://news.google.com/rss/articles/CBMibkFVX3lxTE04ZU1kbFF0cXNrcU9SWnl4dFdPb245djhiSW5wN1RnZmlvWEJNckY0cVlZUkRfdWxJWTUzSTRaMzAzVmViOExEZjBiZDFxTFBUel9MUWRhQms3cWx2S1FsemVUN1JfanZjc2ZLNEZn?oc=5</guid>
+      <pubDate>Sun, 01 Feb 2026 17:17:06 +0000</pubDate>
+      <description><![CDATA[<p>Lexicon Inc., Arkansas&#39;s largest steel mill, is taken over by its workers</p>]]></description>
+      <content:encoded><![CDATA[<p>Lexicon Inc., Arkansas&#39;s largest steel mill, is taken over by its workers</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>GKN does not give up</title>
+      <link>https://lanticapitaliste.org/opinions/entreprises/une-campagne-de-solidarite-internationale-pour-soutenir-le-projet</link>
+      <guid>https://lanticapitaliste.org/opinions/entreprises/une-campagne-de-solidarite-internationale-pour-soutenir-le-projet</guid>
+      <pubDate>Sun, 01 Feb 2026 17:12:30 +0000</pubDate>
+      <description><![CDATA[<p>The worker-led struggle for the ecological re-industrialization project at the GKN factory in Florence is receiving a significant international solidarity campaign. This initiative represents an emerging tension and a potential paradigm shift, as it elevates the workers&#39; struggle from local resistance to a global model of sustainable industrial transformation, uniting worker ownership with ecological imperatives in a pioneering way.</p>]]></description>
+    </item>
+    <item>
+      <title>New discourses on worker cooperatives in South Africa</title>
+      <link>https://www.polity.org.za/article/worker-cooperatives-and-deep-democracy-transformative-politics-and-planetary-care-from-below-2026-01-27</link>
+      <guid>https://www.polity.org.za/article/worker-cooperatives-and-deep-democracy-transformative-politics-and-planetary-care-from-below-2026-01-27</guid>
+      <pubDate>Sun, 01 Feb 2026 13:26:19 +0000</pubDate>
+      <description><![CDATA[<p>&quot;The left has failed to inspire a practical challenge to the planetary crisis of capitalism that has upended nature and society. This book outlines a new transformative politics that emerges from workers&#39; cooperative systems that promote planetary care from below and have the potential to undermine the capitalist status quo.&quot;</p><p> “The crisis of capitalism is planetary. It is a system that disrupts nature and society, causing many to live and work in despair. Until now, the left has been unable to pose a practical challenge to it. In ‘Worker Cooperatives and Deep Democracy,’ Vishwas Satgar and Michelle Williams outline a new transformative politics that emerges from inspiring worker cooperative systems that promote planetary care from below and have the potential to undermine the capitalist status quo.”</p><p> &quot;Based on extensive research in 15 countries, the authors examine case studies that explore transformative approaches to social reproduction, public power, nature protection, and territorial expansion in opposition to global hegemonic power. They also reveal the power of solidarities to generate emancipatory and utopian imaginaries in the global north and south.&quot;</p><p> &quot;Satgar and Williams show how, against all odds, people are experimenting with deep democracy and building care systems to live differently and emerge from the planetary crisis.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>From paper mill in crisis to worker cooperative</title>
+      <link>https://www.lastampa.it/novara/2026/01/29/news/proposta_momo_cooperativa_salvare_cartiera-15486099/</link>
+      <guid>https://www.lastampa.it/novara/2026/01/29/news/proposta_momo_cooperativa_salvare_cartiera-15486099/</guid>
+      <pubDate>Sat, 31 Jan 2026 23:00:06 +0000</pubDate>
+      <description><![CDATA[<p>The assembly of workers at Momo - a well-known Italian paper mill in crisis - is proposing the purchase of the company by the workers.</p>]]></description>
+    </item>
+    <item>
+      <title>From agricultural cooperative to worker cooperative</title>
+      <link>https://www.lavozdegalicia.es/noticia/carballo/zas/2026/01/12/colectivo-xebre-transforma-cooperativa-trabajo-asociado/0003_202601C12C1995.htm</link>
+      <guid>https://www.lavozdegalicia.es/noticia/carballo/zas/2026/01/12/colectivo-xebre-transforma-cooperativa-trabajo-asociado/0003_202601C12C1995.htm</guid>
+      <pubDate>Sat, 31 Jan 2026 22:57:37 +0000</pubDate>
+      <description><![CDATA[<p>&quot;Colectivo Xebre was until now an agricultural cooperative. It was made up of members from the municipalities of Coristanco, Malpica, A Laracha and Zas who joined together solely to sell the harvests from their respective orchards. Some time ago, the group moved all its activity to Fornelos, in the municipality of Zas, leaving their own plots inactive.&quot;</p><p> &quot;Since 2017, the group has had a stall in the Lugo market in A Coruña, where it sells a large part of its production. Other important outlets for the products are collective canteens, mainly in educational centers of the Costa da Morte and also in large companies.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>Repopulation and worker cooperatives in Japan</title>
+      <link>https://www.japantimes.co.jp/news/2026/01/28/japan/society/worker-cooperatives-rural-japan/</link>
+      <guid>https://www.japantimes.co.jp/news/2026/01/28/japan/society/worker-cooperatives-rural-japan/</guid>
+      <pubDate>Sat, 31 Jan 2026 22:04:07 +0000</pubDate>
+      <description><![CDATA[<p>&quot;In sparsely populated areas across Japan, the withdrawal of supermarkets and other businesses has jeopardized essential services vital to the daily lives of residents.&quot;</p><p> &quot;To address this problem, some local governments are turning to resident-run non-profit organizations, known as &#39;worker cooperatives,&#39; as new local service providers.&quot;</p><p> &quot;In these cooperatives, the residents themselves plan, develop, and manage the services their communities need, with the support of local government subsidies to cover initial and operating costs. The Ministry of Economy, Trade, and Industry is also working to create a framework that will make it easier for these organizations to obtain financial assistance and other forms of support.&quot;</p>]]></description>
+    </item>
+    <item>
+      <title>The LSE wonders why there aren't more worker cooperatives and employee-owned businesses</title>
+      <link>https://blogs.lse.ac.uk/businessreview/2026/01/19/if-worker-co-operatives-work-why-arent-there-more-of-them/</link>
+      <guid>https://blogs.lse.ac.uk/businessreview/2026/01/19/if-worker-co-operatives-work-why-arent-there-more-of-them/</guid>
+      <pubDate>Sat, 31 Jan 2026 22:00:33 +0000</pubDate>
+      <description><![CDATA[<p>He responds that it is a market failure based on erroneous beliefs.</p><p> &quot;Taken together, these results point to a belief-based explanation for the limited diffusion of employee ownership. Even when alternative organizational forms function well, distorted perceptions can discourage people from participating in them and reduce political support. In this sense, the scarcity of worker cooperatives may reflect not only economic factors, but also a kind of market failure in information and belief formation.&quot;</p><p> &quot;This perspective has important implications. If pessimistic beliefs are part of the problem, low-cost informational interventions, especially those based on credible evidence and expert input, can play a significant role in changing attitudes. Young people, in particular, seem receptive to such information at a stage when their career expectations are still evolving.&quot;</p>]]></description>
+    </item>
+    <item>
       <title>In the US, the ESOP becomes the default form of business succession</title>
       <link>https://natlawreview.com/article/rising-case-esops-powerful-and-time-tested-succession-alternative-growing-support</link>
       <guid>https://natlawreview.com/article/rising-case-esops-powerful-and-time-tested-succession-alternative-growing-support</guid>
@@ -218,7 +542,7 @@
     <item>
       <title>Cooperative carpentry</title>
       <link>https://quimper.maville.com/actu/actudet_-botmeur.-fth-bois-renov-nouvelle-entreprise-de-menuiserie-_dep-6991644_actu.Htm</link>
-      <guid/>
+      <guid>http://www.bing.com/news/apiclick.aspx?ref=FexRssaid=&amp;tid=68d4e92751e2445bace3ba8fa293fbe6&amp;url=https%3a%2f%2fquimper.maville.com%2factu%2factudet_-botmeur.-fth-bois-renov-nouvelle-entreprise-de-menuiserie-_dep-6991644_actu.Htm&amp;c=14215769468374372428&amp;mkt=fr-fr</guid>
       <pubDate>Thu, 25 Sep 2025 07:16:15 +0000</pubDate>
       <description><![CDATA[Botmeur, #France. A carpentry workshop, a typical example of the new wave of non-technological #WorkCooperatives in #rural areas.]]></description>
       <content:encoded><![CDATA[Botmeur, #France. A carpentry workshop, a typical example of the new wave of non-technological #WorkCooperatives in #rural areas.]]></content:encoded>
